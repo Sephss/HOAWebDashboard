@@ -24,6 +24,7 @@ import {
 } from "./firebase.js";
 import { DataTable } from "./tables.js";
 import { toast, openModal, confirmDialog } from "./ui.js";
+import { uploadImage } from "./imageUpload.js";
 import {
   objectToArray,
   formatDate,
@@ -212,6 +213,7 @@ function openPreviewModal(r) {
       <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
         <span class="badge badge-neutral">${escapeHtml(r.category || "General")}</span>
       </div>
+      ${r.imageUrl ? `<div style="margin-bottom:16px;"><img src="${escapeHtml(r.imageUrl)}" alt="Announcement image" style="max-width:100%;border-radius:10px;display:block;"></div>` : ""}
       <p style="font-size:14px;line-height:1.7;color:var(--color-black);white-space:pre-wrap;">${escapeHtml(r.description || "")}</p>
       ${r.link ? `<div style="margin-top:16px;"><a href="${escapeHtml(r.link)}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">Open attached link ↗</a></div>` : ""}
       <div class="divider"></div>
@@ -277,6 +279,14 @@ function openEditorModal(existing) {
         <div id="descCounter" style="font-size:12px;color:var(--color-grey);margin-top:4px;text-align:right;"></div>
         <span class="field-error">Description is required.</span>
       </div>
+      <div class="field" id="imageField">
+        <label>Image (optional)</label>
+        <input type="file" accept="image/*" class="input" id="imageInput">
+        <div id="imagePreviewWrap" style="margin-top:10px;${existing?.imageUrl ? "" : " display:none;"}">
+          <img id="imagePreview" src="${escapeHtml(existing?.imageUrl || "")}" alt="Attached image" style="max-width:100%;max-height:180px;border-radius:8px;display:block;">
+          <button type="button" class="btn btn-secondary btn-sm" id="removeImageBtn" style="margin-top:8px;">Remove image</button>
+        </div>
+      </div>
     `,
     footerHTML: `
       <button class="btn btn-secondary" data-act="cancel">Cancel</button>
@@ -302,6 +312,34 @@ function openEditorModal(existing) {
   };
   descInput.addEventListener("input", updateDescCounter);
   updateDescCounter();
+
+  let selectedImageFile = null;
+  let removeExistingImage = false;
+  const imageInput = overlay.querySelector("#imageInput");
+  const imagePreviewWrap = overlay.querySelector("#imagePreviewWrap");
+  const imagePreview = overlay.querySelector("#imagePreview");
+  const removeImageBtn = overlay.querySelector("#removeImageBtn");
+
+  imageInput.addEventListener("change", () => {
+    const file = imageInput.files[0];
+    if (!file) return;
+    selectedImageFile = file;
+    removeExistingImage = false;
+    const reader = new FileReader();
+    reader.onload = () => {
+      imagePreview.src = reader.result;
+      imagePreviewWrap.style.display = "";
+    };
+    reader.readAsDataURL(file);
+  });
+
+  removeImageBtn?.addEventListener("click", () => {
+    selectedImageFile = null;
+    removeExistingImage = true;
+    imageInput.value = "";
+    imagePreview.src = "";
+    imagePreviewWrap.style.display = "none";
+  });
 
   overlay
     .querySelector('[data-act="save"]')
@@ -344,7 +382,30 @@ function openEditorModal(existing) {
       const date = formatDateMDY(new Date(`${dateVal}T00:00:00`));
       const time = formatTimeFromInput(timeVal);
 
-      const payload = { title, description, category, date, time, link };
+      let imageUrl = removeExistingImage ? "" : existing?.imageUrl || "";
+      const saveBtn = overlay.querySelector('[data-act="save"]');
+      const originalSaveLabel = saveBtn.textContent;
+
+      if (selectedImageFile) {
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Uploading image…";
+        try {
+          imageUrl = await uploadImage(selectedImageFile);
+        } catch (uploadErr) {
+          toast({
+            type: "danger",
+            title: "Image upload failed",
+            desc: uploadErr.message,
+          });
+          saveBtn.disabled = false;
+          saveBtn.textContent = originalSaveLabel;
+          return;
+        }
+        saveBtn.disabled = false;
+        saveBtn.textContent = originalSaveLabel;
+      }
+
+      const payload = { title, description, category, date, time, link, imageUrl };
 
       try {
         if (isEdit) {
