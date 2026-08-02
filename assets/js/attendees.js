@@ -243,7 +243,7 @@ function signatureCellHTML(signatureUrl) {
       src="${escapeHtml(signatureUrl)}"
       alt="Signature"
       data-signature-preview="${escapeHtml(signatureUrl)}"
-      style="height:32px;max-width:90px;object-fit:contain;background:#fff;border:1px solid var(--color-border,#e5e7eb);border-radius:4px;padding:2px;cursor:pointer;"
+      style="height:82px;max-width:140px;object-fit:contain;background:#fff;border:1px solid var(--color-border,#e5e7eb);border-radius:4px;padding:2px;cursor:pointer;"
     />
   `;
 }
@@ -306,5 +306,5 @@ function printSignatureCellHTML(signatureUrl) {
   if (!signatureUrl) {
     return `<span style="color:#5C5F61;">—</span>`;
   }
-  return `<img src="${escapeHtml(signatureUrl)}" alt="Signature" style="height:24px;width:auto;max-width:80px;display:block;background:#fff;border:1px solid #e5e7eb;" />`;
+  return `<img src="${escapeHtml(signatureUrl)}" alt="Signature" style="height:80px;width:auto;max-width:120px;display:block;background:#fff;border:1px solid #e5e7eb;" />`;
 }

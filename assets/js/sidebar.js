@@ -14,6 +14,7 @@ import {
 import { initials, timeAgo } from "./utils.js";
 import { db, ref, onValue, DB_PATHS } from "./firebase.js";
 import { initBackgroundMusic } from "./audio.js";
+
 const ICONS = {
   dashboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="9" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="12" width="8" height="9" rx="2"/><rect x="3" y="16" width="8" height="5" rx="2"/></svg>`,
   users: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke-linecap="round"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke-linecap="round"/></svg>`,
@@ -32,6 +33,7 @@ const ICONS = {
   menu: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16" stroke-linecap="round"/></svg>`,
   search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3" stroke-linecap="round"/></svg>`,
   calendar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01"/></svg>`,
+  info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 16v-5M12 8h.01" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   user: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7" stroke-linecap="round"/></svg>`,
 };
 
@@ -112,6 +114,12 @@ const NAV = [
         href: "settings.html",
         label: "Settings",
         icon: ICONS.settings,
+      },
+      {
+        id: "about",
+        href: "about.html",
+        label: "About Us",
+        icon: ICONS.info,
       },
     ],
   },
@@ -195,9 +203,11 @@ export function renderShell(activeId, profile, opts = {}) {
       </div>
     </div>
     <div class="topbar__right">
+      <!--
       <button class="icon-btn" id="themeToggleBtn" aria-label="Toggle dark mode" title="Toggle theme">
         ${document.documentElement.getAttribute("data-theme") === "dark" ? ICONS.sun : ICONS.moon}
       </button>
+      -->
       <div class="dropdown">
         <button class="profile-trigger" data-dropdown-trigger>
           <div class="avatar">${initials([profile?.firstName, profile?.lastName].filter(Boolean).join(" ") || profile?.email)}</div>
@@ -236,11 +246,11 @@ export function renderShell(activeId, profile, opts = {}) {
     backdrop.classList.remove("show");
   });
 
-  // --- theme toggle ---
-  topbar.querySelector("#themeToggleBtn").addEventListener("click", (e) => {
-    const next = toggleTheme();
-    e.currentTarget.innerHTML = next === "dark" ? ICONS.sun : ICONS.moon;
-  });
+  // --- theme toggle (registered once) ---
+  // topbar.querySelector("#themeToggleBtn").addEventListener("click", (e) => {
+  //   const next = toggleTheme();
+  //   e.currentTarget.innerHTML = next === "dark" ? ICONS.sun : ICONS.moon;
+  // });
 
   // --- dropdowns ---
   shell.querySelectorAll(".dropdown").forEach(initDropdown);
@@ -253,19 +263,17 @@ export function renderShell(activeId, profile, opts = {}) {
 
   initBackToTop();
   bindBadgeCounts(shell);
-  // --- theme toggle ---
-  topbar.querySelector("#themeToggleBtn").addEventListener("click", (e) => {
-    const next = toggleTheme();
-    e.currentTarget.innerHTML = next === "dark" ? ICONS.sun : ICONS.moon;
-  });
 
   // --- background music toggle, placed right after the theme toggle ---
   const musicBtn = initBackgroundMusic();
   if (musicBtn) {
-    topbar
-      .querySelector("#themeToggleBtn")
-      .insertAdjacentElement("afterend", musicBtn);
+    // Was: inserted right after #themeToggleBtn. Since the theme toggle is
+    // currently commented out above, prepend into topbar__right instead
+    // so this doesn't throw on a null reference.
+    // topbar.querySelector("#themeToggleBtn").insertAdjacentElement("afterend", musicBtn);
+    topbar.querySelector(".topbar__right").prepend(musicBtn);
   }
+
   const loader = document.getElementById("pageLoader");
   if (loader) setTimeout(() => loader.remove(), 180);
 }
