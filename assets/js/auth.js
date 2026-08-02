@@ -4,26 +4,49 @@
    page calls `handleLogin()` on form submit.
    ============================================================ */
 import {
-  auth, db, ref, get, signInWithEmailAndPassword, signOut, onAuthStateChanged,
-  sendPasswordResetEmail, setPersistence, browserLocalPersistence, browserSessionPersistence,
-  DB_PATHS, ALLOWED_ROLES, DENIED_ROLES,
+  auth,
+  db,
+  ref,
+  get,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
+  DB_PATHS,
+  ALLOWED_ROLES,
+  DENIED_ROLES,
 } from "./firebase.js";
-
+import { initBackgroundMusic } from "./audio.js";
 const SESSION_KEY = "hoa_admin_profile";
 
 /** Normalize a role string for comparison. */
 function normalizeRole(role) {
-  return String(role || "").trim().toLowerCase();
+  return String(role || "")
+    .trim()
+    .toLowerCase();
 }
 
 function isAllowedRole(role) {
   const r = normalizeRole(role);
-  return ALLOWED_ROLES.some((a) => normalizeRole(a) === r) || r === "admin" || r.includes("official");
+  return (
+    ALLOWED_ROLES.some((a) => normalizeRole(a) === r) ||
+    r === "admin" ||
+    r.includes("official")
+  );
 }
 
 function isDeniedRole(role) {
   const r = normalizeRole(role);
-  return DENIED_ROLES.some((d) => normalizeRole(d) === r) || r === "home owner" || r === "homeowner" || r === "renter" || r === "renters";
+  return (
+    DENIED_ROLES.some((d) => normalizeRole(d) === r) ||
+    r === "home owner" ||
+    r === "homeowner" ||
+    r === "renter" ||
+    r === "renters"
+  );
 }
 
 /**
@@ -39,7 +62,10 @@ export async function fetchUserProfile(uid) {
  * Throws a friendly Error with a `.code` string on failure.
  */
 export async function handleLogin(email, password, remember = true) {
-  await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
+  await setPersistence(
+    auth,
+    remember ? browserLocalPersistence : browserSessionPersistence,
+  );
 
   let credential;
   try {
@@ -53,7 +79,9 @@ export async function handleLogin(email, password, remember = true) {
 
   if (!profile) {
     await signOut(auth);
-    const e = new Error("We couldn't find an account record for this login. Please contact your system administrator.");
+    const e = new Error(
+      "We couldn't find an account record for this login. Please contact your system administrator.",
+    );
     e.code = "profile/not-found";
     throw e;
   }
@@ -69,7 +97,9 @@ export async function handleLogin(email, password, remember = true) {
 
   if (String(profile.isAccountDisabled).toLowerCase() === "yes") {
     await signOut(auth);
-    const e = new Error("Your account has been disabled. Please contact a system administrator.");
+    const e = new Error(
+      "Your account has been disabled. Please contact a system administrator.",
+    );
     e.code = "auth/disabled";
     throw e;
   }
@@ -94,12 +124,18 @@ function mapAuthError(err) {
     "auth/user-not-found": "No account found with this email address.",
     "auth/wrong-password": "Incorrect password. Please try again.",
     "auth/invalid-credential": "Incorrect email or password. Please try again.",
-    "auth/invalid-login-credentials": "Incorrect email or password. Please try again.",
-    "auth/too-many-requests": "Too many failed attempts. Please wait a moment and try again.",
-    "auth/network-request-failed": "Network error. Please check your connection and try again.",
+    "auth/invalid-login-credentials":
+      "Incorrect email or password. Please try again.",
+    "auth/too-many-requests":
+      "Too many failed attempts. Please wait a moment and try again.",
+    "auth/network-request-failed":
+      "Network error. Please check your connection and try again.",
     "auth/missing-password": "Please enter your password.",
   };
-  const e = new Error(map[code] || "Unable to sign in. Please check your credentials and try again.");
+  const e = new Error(
+    map[code] ||
+      "Unable to sign in. Please check your credentials and try again.",
+  );
   e.code = code || "auth/unknown";
   return e;
 }
@@ -144,19 +180,26 @@ export function guardPage() {
       if (!profile || profile.uid !== user.uid) {
         profile = await fetchUserProfile(user.uid);
       }
-      const role = profile?.role || profile?.userRole || profile?.accountType || "";
+      const role =
+        profile?.role || profile?.userRole || profile?.accountType || "";
 
       if (!profile || isDeniedRole(role) || !isAllowedRole(role)) {
         await signOut(auth);
         redirectToLogin("unauthorized");
         return;
       }
-      if (String(profile.isAccountDisabled).toLowerCase() === "yes" || String(profile.isAccountBanned).toLowerCase() === "yes") {
+      if (
+        String(profile.isAccountDisabled).toLowerCase() === "yes" ||
+        String(profile.isAccountBanned).toLowerCase() === "yes"
+      ) {
         await signOut(auth);
         redirectToLogin("restricted");
         return;
       }
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify({ uid: user.uid, ...profile }));
+      sessionStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify({ uid: user.uid, ...profile }),
+      );
       resolve({ uid: user.uid, ...profile });
     });
   });

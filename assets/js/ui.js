@@ -3,7 +3,7 @@
    theme toggle, confirm dialogs). Import what you need.
    ============================================================ */
 import { uid, escapeHtml } from "./utils.js";
-
+import { initBackgroundMusic } from "./audio.js";
 /* ---------------------------------------------------------
    TOASTS
    --------------------------------------------------------- */
@@ -29,7 +29,12 @@ const TOAST_ICONS = {
  * Show a toast notification.
  * @param {Object} opts { type: 'success'|'danger'|'warning'|'info', title, desc, duration }
  */
-export function toast({ type = "info", title, desc = "", duration = 4200 } = {}) {
+export function toast({
+  type = "info",
+  title,
+  desc = "",
+  duration = 4200,
+} = {}) {
   const stack = getToastStack();
   const el = document.createElement("div");
   const id = uid("toast");
@@ -64,7 +69,14 @@ let activeOverlay = null;
  * Open a modal built from HTML content. Returns the overlay element
  * so the caller can wire up its own footer button listeners.
  */
-export function openModal({ title, subtitle = "", bodyHTML = "", footerHTML = "", size = "" , onClose } = {}) {
+export function openModal({
+  title,
+  subtitle = "",
+  bodyHTML = "",
+  footerHTML = "",
+  size = "",
+  onClose,
+} = {}) {
   closeModal(); // enforce single modal at a time
   const overlay = document.createElement("div");
   overlay.className = "modal-overlay";
@@ -97,8 +109,15 @@ export function openModal({ title, subtitle = "", bodyHTML = "", footerHTML = ""
     }, 200);
   };
   overlay.querySelector(".modal__close").addEventListener("click", close);
-  overlay.addEventListener("click", (e) => { if (e.target === overlay) close(); });
-  const escHandler = (e) => { if (e.key === "Escape") { close(); document.removeEventListener("keydown", escHandler); } };
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) close();
+  });
+  const escHandler = (e) => {
+    if (e.key === "Escape") {
+      close();
+      document.removeEventListener("keydown", escHandler);
+    }
+  };
   document.addEventListener("keydown", escHandler);
 
   overlay.close = close;
@@ -113,10 +132,22 @@ export function closeModal() {
 /**
  * Confirmation dialog. Resolves `true` if confirmed, `false` if cancelled.
  */
-export function confirmDialog({ title, message, confirmLabel = "Confirm", cancelLabel = "Cancel", tone = "danger" } = {}) {
+export function confirmDialog({
+  title,
+  message,
+  confirmLabel = "Confirm",
+  cancelLabel = "Cancel",
+  tone = "danger",
+} = {}) {
   return new Promise((resolve) => {
-    const iconClass = tone === "danger" ? "" : tone === "warning" ? "warn" : "success";
-    const btnClass = tone === "danger" ? "btn-danger" : tone === "warning" ? "btn-accent" : "btn-success";
+    const iconClass =
+      tone === "danger" ? "" : tone === "warning" ? "warn" : "success";
+    const btnClass =
+      tone === "danger"
+        ? "btn-danger"
+        : tone === "warning"
+          ? "btn-accent"
+          : "btn-success";
     const overlay = openModal({
       title,
       bodyHTML: `
@@ -133,17 +164,21 @@ export function confirmDialog({ title, message, confirmLabel = "Confirm", cancel
       `,
       onClose: () => resolve(false),
     });
-    overlay.querySelector('[data-act="cancel"]').addEventListener("click", () => overlay.close());
-    overlay.querySelector('[data-act="confirm"]').addEventListener("click", () => {
-      resolve(true);
-      overlay.onClose = null;
-      overlay.close();
-      // prevent double resolve from onClose
-      overlay.close = () => {
-        overlay.classList.remove("open");
-        setTimeout(() => overlay.remove(), 200);
-      };
-    });
+    overlay
+      .querySelector('[data-act="cancel"]')
+      .addEventListener("click", () => overlay.close());
+    overlay
+      .querySelector('[data-act="confirm"]')
+      .addEventListener("click", () => {
+        resolve(true);
+        overlay.onClose = null;
+        overlay.close();
+        // prevent double resolve from onClose
+        overlay.close = () => {
+          overlay.classList.remove("open");
+          setTimeout(() => overlay.remove(), 200);
+        };
+      });
   });
 }
 
@@ -152,8 +187,14 @@ export function confirmDialog({ title, message, confirmLabel = "Confirm", cancel
    --------------------------------------------------------- */
 document.addEventListener("click", (e) => {
   document.querySelectorAll(".dropdown__menu.open").forEach((menu) => {
-    const trigger = menu.closest(".dropdown")?.querySelector("[data-dropdown-trigger]");
-    if (!menu.contains(e.target) && e.target !== trigger && !trigger?.contains(e.target)) {
+    const trigger = menu
+      .closest(".dropdown")
+      ?.querySelector("[data-dropdown-trigger]");
+    if (
+      !menu.contains(e.target) &&
+      e.target !== trigger &&
+      !trigger?.contains(e.target)
+    ) {
       menu.classList.remove("open");
     }
   });
@@ -165,7 +206,9 @@ export function initDropdown(dropdownEl) {
   if (!trigger || !menu) return;
   trigger.addEventListener("click", (e) => {
     e.stopPropagation();
-    document.querySelectorAll(".dropdown__menu.open").forEach((m) => { if (m !== menu) m.classList.remove("open"); });
+    document.querySelectorAll(".dropdown__menu.open").forEach((m) => {
+      if (m !== menu) m.classList.remove("open");
+    });
     menu.classList.toggle("open");
   });
 }
@@ -180,7 +223,8 @@ export function initTheme() {
 }
 
 export function toggleTheme() {
-  const current = document.documentElement.getAttribute("data-theme") || "light";
+  const current =
+    document.documentElement.getAttribute("data-theme") || "light";
   const next = current === "light" ? "dark" : "light";
   document.documentElement.setAttribute("data-theme", next);
   localStorage.setItem("hoa-theme", next);
@@ -193,12 +237,23 @@ export function toggleTheme() {
 export function skeletonRows(count = 5, cols = 5) {
   return Array.from({ length: count })
     .map(
-      () => `<tr>${Array.from({ length: cols }).map(() => `<td><div class="skeleton skeleton-text" style="width:${60 + Math.random() * 30}%"></div></td>`).join("")}</tr>`
+      () =>
+        `<tr>${Array.from({ length: cols })
+          .map(
+            () =>
+              `<td><div class="skeleton skeleton-text" style="width:${60 + Math.random() * 30}%"></div></td>`,
+          )
+          .join("")}</tr>`,
     )
     .join("");
 }
 
-export function emptyState({ icon = defaultEmptyIcon(), title, desc = "", actionHTML = "" }) {
+export function emptyState({
+  icon = defaultEmptyIcon(),
+  title,
+  desc = "",
+  actionHTML = "",
+}) {
   return `
     <div class="empty-state">
       <div class="empty-state__icon">${icon}</div>
@@ -229,5 +284,7 @@ export function initBackToTop() {
     btn.classList.toggle("show", y > 400);
   };
   (target || window).addEventListener("scroll", onScroll);
-  btn.addEventListener("click", () => (target || window).scrollTo({ top: 0, behavior: "smooth" }));
+  btn.addEventListener("click", () =>
+    (target || window).scrollTo({ top: 0, behavior: "smooth" }),
+  );
 }

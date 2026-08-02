@@ -13,7 +13,7 @@ import {
 } from "./ui.js";
 import { initials, timeAgo } from "./utils.js";
 import { db, ref, onValue, DB_PATHS } from "./firebase.js";
-
+import { initBackgroundMusic } from "./audio.js";
 const ICONS = {
   dashboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="9" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="12" width="8" height="9" rx="2"/><rect x="3" y="16" width="8" height="5" rx="2"/></svg>`,
   users: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke-linecap="round"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke-linecap="round"/></svg>`,
@@ -253,7 +253,19 @@ export function renderShell(activeId, profile, opts = {}) {
 
   initBackToTop();
   bindBadgeCounts(shell);
+  // --- theme toggle ---
+  topbar.querySelector("#themeToggleBtn").addEventListener("click", (e) => {
+    const next = toggleTheme();
+    e.currentTarget.innerHTML = next === "dark" ? ICONS.sun : ICONS.moon;
+  });
 
+  // --- background music toggle, placed right after the theme toggle ---
+  const musicBtn = initBackgroundMusic();
+  if (musicBtn) {
+    topbar
+      .querySelector("#themeToggleBtn")
+      .insertAdjacentElement("afterend", musicBtn);
+  }
   const loader = document.getElementById("pageLoader");
   if (loader) setTimeout(() => loader.remove(), 180);
 }
