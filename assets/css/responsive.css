@@ -1,0 +1,65 @@
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+/* ---- Tablet ---- */
+@media (max-width: 1180px) {
+  .stat-grid { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+  .chart-grid { grid-template-columns: 1fr; }
+  .topbar__search { width: 200px; }
+}
+
+/* ---- Small tablet / large mobile ---- */
+@media (max-width: 960px) {
+  .sidebar {
+    transform: translateX(-100%);
+    width: var(--sidebar-w);
+    box-shadow: var(--shadow-xl);
+  }
+  .sidebar.mobile-open { transform: translateX(0); }
+  .sidebar.collapsed { width: var(--sidebar-w); }
+  .sidebar.collapsed .sidebar__brand-text,
+  .sidebar.collapsed .sidebar__section-label,
+  .sidebar.collapsed .sidebar__link span:not(.badge-count) { display: block; }
+  .sidebar.collapsed .sidebar__link { justify-content: flex-start; }
+  .sidebar__footer { display: none; }
+
+  .main-col, #app-shell.sidebar-collapsed .main-col { margin-left: 0; }
+
+  .topbar__menu-btn { display: flex; }
+  .topbar__search { display: none; }
+  .breadcrumb__current { font-size: var(--fs-md); }
+
+  .detail-grid { grid-template-columns: 1fr; }
+}
+
+/* ---- Mobile ---- */
+@media (max-width: 640px) {
+  .content { padding: var(--sp-4); }
+  .topbar { padding: 0 var(--sp-4); }
+  .page-header { flex-direction: column; align-items: stretch; }
+  .page-header__actions { width: 100%; }
+  .page-header__actions .btn { flex: 1; }
+
+  .stat-grid { grid-template-columns: 1fr 1fr; gap: var(--sp-3); }
+  .stat-card__value { font-size: var(--fs-xl); }
+
+  .table-toolbar { flex-direction: column; align-items: stretch; }
+  .table-toolbar__left, .table-toolbar__right { width: 100%; }
+  .table-search { width: 100%; min-width: 0; }
+
+  .modal { max-width: calc(100vw - 24px); max-height: 92vh; }
+  .modal-lg, .modal-xl { max-width: calc(100vw - 24px); }
+
+  .toast-stack { left: 12px; right: 12px; width: auto; bottom: 12px; }
+
+  .profile-trigger__meta { display: none; }
+  .back-to-top { bottom: 16px; right: 16px; }
+
+  .kpi-row { grid-template-columns: 1fr 1fr; }
+  .donut-wrap { flex-direction: column; }
+}
+
+@media (max-width: 420px) {
+  .stat-grid { grid-template-columns: 1fr; }
+}

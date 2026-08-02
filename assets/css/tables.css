@@ -1,0 +1,77 @@
+/* ============================================================
+   DATA TABLE COMPONENT
+   ============================================================ */
+.table-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--sp-3); padding: var(--sp-4) var(--sp-5);
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--color-border);
+}
+.table-toolbar__left { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; flex: 1; }
+.table-toolbar__right { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+
+.table-search {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--color-bg); border: 1px solid var(--color-border);
+  border-radius: var(--radius-md); padding: 8px 12px;
+  width: 100%; max-width: 280px; min-width: 200px;
+  flex: 0 1 280px;
+}
+.table-search svg { width: 15px; height: 15px; color: var(--color-grey-light); flex-shrink: 0; }
+.table-search input { background: none; border: none; outline: none; width: 100%; font-size: var(--fs-sm); }
+
+.filter-bar { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; padding: 0 var(--sp-5) var(--sp-4); }
+
+.table-scroll { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; min-width: 720px; }
+.data-table thead th {
+  position: sticky; top: 0; z-index: 5;
+  background: var(--color-surface-alt);
+  text-align: left;
+  font-size: var(--fs-2xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-grey);
+  padding: 12px var(--sp-4);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+}
+.data-table th.sortable { cursor: pointer; user-select: none; }
+.data-table th.sortable:hover { color: var(--color-primary); }
+.data-table th .sort-icon { display: inline-flex; vertical-align: middle; margin-left: 4px; opacity: 0.4; width: 12px; height: 12px; }
+.data-table th.sorted-asc .sort-icon, .data-table th.sorted-desc .sort-icon { opacity: 1; color: var(--color-accent); }
+.data-table th.sorted-desc .sort-icon { transform: rotate(180deg); }
+.data-table th.checkbox-col, .data-table td.checkbox-col { width: 40px; }
+
+.data-table tbody tr { border-bottom: 1px solid var(--color-border); transition: background var(--dur-fast) var(--ease); }
+.data-table tbody tr:hover { background: var(--color-primary-50); }
+.data-table tbody tr:last-child { border-bottom: none; }
+.data-table td { padding: 13px var(--sp-4); font-size: var(--fs-sm); color: var(--color-black); vertical-align: middle; }
+.data-table td.muted { color: var(--color-grey); }
+
+.cell-user { display: flex; align-items: center; gap: 10px; }
+.cell-user__name { font-weight: 600; color: var(--color-black); }
+.cell-user__sub { font-size: var(--fs-2xs); color: var(--color-grey); }
+
+.row-actions { display: flex; align-items: center; gap: 4px; justify-content: flex-end; }
+
+.table-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--sp-4) var(--sp-5); flex-wrap: wrap; gap: var(--sp-3);
+  border-top: 1px solid var(--color-border);
+}
+.table-footer__info { font-size: var(--fs-xs); color: var(--color-grey); }
+.pagination { display: flex; align-items: center; gap: 4px; }
+.pagination__btn {
+  min-width: 32px; height: 32px; padding: 0 8px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-sm); font-size: var(--fs-xs); font-weight: 600;
+  color: var(--color-grey); border: 1px solid transparent;
+}
+.pagination__btn:hover:not(:disabled) { background: var(--color-primary-50); color: var(--color-primary); }
+.pagination__btn.active { background: var(--color-primary); color: #fff; }
+.pagination__btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.page-size-select { display: flex; align-items: center; gap: 8px; font-size: var(--fs-xs); color: var(--color-grey); }
+.page-size-select select { border: 1px solid var(--color-border-strong); border-radius: var(--radius-sm); padding: 5px 8px; font-size: var(--fs-xs); background: var(--color-surface); }

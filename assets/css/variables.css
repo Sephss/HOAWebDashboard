@@ -1,0 +1,128 @@
+/* ============================================================
+   DESIGN TOKENS — HOA Admin Dashboard
+   Palette derived from the companion Android application.
+   ============================================================ */
+:root {
+  /* ---- Brand ---- */
+  --color-primary: #013717;
+  --color-primary-50:  #e7efe9;
+  --color-primary-100: #c7dccd;
+  --color-primary-200: #9ec2a8;
+  --color-primary-300: #6a9f7c;
+  --color-primary-400: #2f7250;
+  --color-primary-500: #013717;
+  --color-primary-600: #012e13;
+  --color-primary-700: #01230f;
+  --color-primary-800: #01180a;
+  --color-primary-900: #000d05;
+
+  --color-accent: #BF942E;
+  --color-accent-light: #E4C77A;
+  --color-accent-dark: #96721E;
+
+  /* ---- Neutrals ---- */
+  --color-bg: #F7F9FA;
+  --color-surface: #FFFFFF;
+  --color-surface-alt: #FBFCFC;
+  --color-border: #E7EBEC;
+  --color-border-strong: #D6DBDC;
+  --color-black: #191C1E;
+  --color-grey: #5C5F61;
+  --color-grey-light: #8B8E90;
+  --color-grey-lighter: #B8BABB;
+
+  /* ---- Semantic ---- */
+  --color-success: #159B4C;
+  --color-success-bg: #E7F6ED;
+  --color-warning: #B8860B;
+  --color-warning-bg: #FDF5E0;
+  --color-danger: #D64545;
+  --color-danger-bg: #FFC1C1;
+  --color-info: #2D6CDF;
+  --color-info-bg: #E8F0FE;
+
+  /* ---- Status Badge Colors ---- */
+  --status-pending: #B8860B;
+  --status-pending-bg: #FDF5E0;
+  --status-review: #2D6CDF;
+  --status-review-bg: #E8F0FE;
+  --status-approved: #159B4C;
+  --status-approved-bg: #E7F6ED;
+  --status-rejected: #D64545;
+  --status-rejected-bg: #FDEAEA;
+  --status-cancelled: #5C5F61;
+  --status-cancelled-bg: #EFF1F1;
+  --status-investigation: #7B4FC9;
+  --status-investigation-bg: #F0EAFB;
+  --status-resolved: #159B4C;
+  --status-resolved-bg: #E7F6ED;
+
+  /* ---- Typography ---- */
+  --font-display: 'Plus Jakarta Sans', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Inter', Roboto, Helvetica, Arial, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+
+  --fs-2xs: 0.6875rem;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.8125rem;
+  --fs-base: 0.9375rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.375rem;
+  --fs-2xl: 1.75rem;
+  --fs-3xl: 2.25rem;
+
+  /* ---- Spacing scale ---- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+
+  /* ---- Radii ---- */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-full: 999px;
+
+  /* ---- Shadows ---- */
+  --shadow-xs: 0 1px 2px rgba(1, 55, 23, 0.04);
+  --shadow-sm: 0 1px 3px rgba(1, 55, 23, 0.06), 0 1px 2px rgba(1, 55, 23, 0.04);
+  --shadow-md: 0 4px 12px rgba(1, 55, 23, 0.08), 0 2px 4px rgba(1, 55, 23, 0.04);
+  --shadow-lg: 0 12px 28px rgba(1, 55, 23, 0.12), 0 4px 8px rgba(1, 55, 23, 0.04);
+  --shadow-xl: 0 24px 48px rgba(1, 55, 23, 0.18);
+  --shadow-focus: 0 0 0 3px rgba(191, 148, 46, 0.35);
+
+  /* ---- Layout ---- */
+  --sidebar-w: 264px;
+  --sidebar-w-collapsed: 76px;
+  --topbar-h: 68px;
+
+  /* ---- Motion ---- */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 340ms;
+}
+
+/* ---- Dark mode overrides ---- */
+[data-theme="dark"] {
+  --color-bg: #0E1210;
+  --color-surface: #161B18;
+  --color-surface-alt: #1C221E;
+  --color-border: #263029;
+  --color-border-strong: #313D34;
+  --color-black: #F2F4F3;
+  --color-grey: #A7ACA8;
+  --color-grey-light: #7D827E;
+  --color-grey-lighter: #565B57;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.45);
+}

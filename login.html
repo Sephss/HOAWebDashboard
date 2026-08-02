@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign In · HOA Manager Admin Console</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%23013717%22/><text x=%2250%22 y=%2265%22 font-size=%2244%22 font-family=%22sans-serif%22 font-weight=%22800%22 fill=%22%23BF942E%22 text-anchor=%22middle%22>H</text></svg>">
+<link rel="stylesheet" href="assets/css/variables.css">
+<link rel="stylesheet" href="assets/css/base.css">
+<link rel="stylesheet" href="assets/css/components.css">
+<link rel="stylesheet" href="assets/css/login.css">
+<link rel="stylesheet" href="assets/css/responsive.css">
+</head>
+<body>
+
+<div class="login-shell">
+
+  <!-- ================= Brand panel ================= -->
+  <div class="login-brand">
+    <div class="login-brand__pattern"></div>
+    <div class="login-brand__top">
+      <div class="login-brand__mark">HM</div>
+      <div>
+        <div class="login-brand__title">HOA Manager</div>
+        <div class="login-brand__sub">Admin Console</div>
+      </div>
+    </div>
+
+    <div class="login-brand__mid">
+      <h1>Run your association<br>with confidence.</h1>
+      <p>One dashboard for resident approvals, document requests, grievance reports, maintenance tickets, and community announcements — built for HOA administrators and officials.</p>
+      <div class="login-brand__stats">
+        <div>
+          <div class="login-brand__stat-value">24/7</div>
+          <div class="login-brand__stat-label">Real-time sync</div>
+        </div>
+        <div>
+          <div class="login-brand__stat-value">100%</div>
+          <div class="login-brand__stat-label">Cloud secured</div>
+        </div>
+        <div>
+          <div class="login-brand__stat-value">5</div>
+          <div class="login-brand__stat-label">Core modules</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="login-brand__footer">© 2026 HOA Manager. All rights reserved.</div>
+  </div>
+
+  <!-- ================= Form panel ================= -->
+  <div class="login-form-panel">
+    <div class="login-form-card">
+      <div class="login-form-card__eyebrow">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>
+        Restricted access
+      </div>
+      <h2>Welcome back</h2>
+      <p class="login-form-card__sub">Sign in with your administrator or HOA official account.</p>
+
+      <div class="login-alert" id="loginAlert">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/></svg>
+        <span id="loginAlertText"></span>
+      </div>
+
+      <form id="loginForm" novalidate>
+        <div class="field" id="emailField">
+          <label for="emailInput">Email address</label>
+          <div class="input-group">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z" opacity="0"/><path d="M22 6l-10 7L2 6" stroke-linecap="round" stroke-linejoin="round"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg>
+            <input class="input" type="email" id="emailInput" placeholder="you@hoamanager.com" autocomplete="username" required>
+          </div>
+          <span class="field-error">Enter a valid email address.</span>
+        </div>
+
+        <div class="field" id="passwordField">
+          <label for="passwordInput">Password</label>
+          <div class="input-group">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4" stroke-linecap="round"/></svg>
+            <input class="input" type="password" id="passwordInput" placeholder="••••••••" autocomplete="current-password" required style="padding-right:38px;">
+            <button type="button" class="input-group__toggle" id="togglePasswordBtn" aria-label="Show password" tabindex="-1">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+          <span class="field-error">Enter your password.</span>
+        </div>
+
+        <div class="login-form-footer">
+          <label class="checkbox-row">
+            <input type="checkbox" id="rememberMeInput" checked>
+            Keep me signed in
+          </label>
+          <button type="button" class="login-link" id="forgotPasswordBtn">Forgot password?</button>
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-lg btn-block" id="loginSubmitBtn">
+          Sign In
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </form>
+
+      <div class="login-divider">Access policy</div>
+      <div class="login-note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01" stroke-linecap="round"/></svg>
+        <span>This console is restricted to <strong>Admins</strong> and <strong>HOA Officials</strong> only. Homeowner and renter accounts cannot sign in here — please use the mobile app instead.</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script type="module" src="assets/js/login.js"></script>
+</body>
+</html>
