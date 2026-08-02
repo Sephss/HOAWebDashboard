@@ -151,9 +151,9 @@ export function renderShell(activeId, profile, opts = {}) {
   sidebar.className = `sidebar${collapsedSaved ? " collapsed" : ""}`;
   sidebar.innerHTML = `
     <div class="sidebar__brand">
-      <div class="sidebar__brand-mark">HM</div>
+      <div class="sidebar__brand-mark"> <img src="assets/images/logo.png" alt="Logo" /></div>
       <div class="sidebar__brand-text">
-        <div class="sidebar__brand-title">HOA Manager</div>
+        <div class="sidebar__brand-title">LP3 HOA v1.0</div>
         <div class="sidebar__brand-sub">Admin Console</div>
       </div>
     </div>
