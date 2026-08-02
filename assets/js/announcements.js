@@ -405,7 +405,15 @@ function openEditorModal(existing) {
         saveBtn.textContent = originalSaveLabel;
       }
 
-      const payload = { title, description, category, date, time, link, imageUrl };
+      const payload = {
+        title,
+        description,
+        category,
+        date,
+        time,
+        link,
+        imageUrl,
+      };
 
       try {
         if (isEdit) {
