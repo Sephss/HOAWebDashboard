@@ -6,7 +6,16 @@
    ============================================================ */
 import { guardPage } from "./auth.js";
 import { renderShell } from "./sidebar.js";
-import { db, ref, onValue, remove, update, DB_PATHS } from "./firebase.js";
+import {
+  db,
+  ref,
+  onValue,
+  remove,
+  update,
+  push,
+  set,
+  DB_PATHS,
+} from "./firebase.js";
 import {
   objectToArray,
   formatDate,
@@ -18,7 +27,9 @@ import {
 import { toast, openModal } from "./ui.js";
 
 const adminProfile = await guardPage();
-renderShell("reservations", adminProfile, { breadcrumb: "Facilities Reservation" });
+renderShell("reservations", adminProfile, {
+  breadcrumb: "Facilities Reservation",
+});
 
 const SPORTS_CATEGORIES = [
   "Basketball",
@@ -38,6 +49,54 @@ const ALL_SLOTS = [
   "2:00 PM - 5:00 PM",
   "5:00 PM - 8:00 PM",
 ];
+
+/** Matches Android's SimpleDateFormat("MMMM dd, yyyy") in the Asia/Manila timezone. */
+function formatManilaDate(date = new Date()) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    month: "long",
+    day: "2-digit",
+    year: "numeric",
+  }).format(date);
+}
+
+/** Matches Android's SimpleDateFormat("hh:mm a") in the Asia/Manila timezone. */
+function formatManilaTime(date = new Date()) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+}
+
+/**
+ * Writes a NotificationModel-shaped record to DB_PATHS.notifications,
+ * mirroring FirebaseNotificationManager.createNotification() on Android —
+ * same pattern used in documents.js's notifyRequester().
+ */
+async function notifyBooker(booking, remarks) {
+  const notifMessage = `Your facility reservation for ${booking.bookerSport || "the facility"} on ${booking.requestBookingDate || ""} has been cancelled.`;
+  const now = new Date();
+
+  const notifRef = push(ref(db, DB_PATHS.notifications));
+  const data = {
+    notificationID: notifRef.key,
+    receiverID: booking.bookerID || "",
+    title: "",
+    message: remarks,
+    notificationType: booking.bookerSport || "",
+    action: "cancelled",
+    date: formatManilaDate(now),
+    time: formatManilaTime(now),
+    referenceID: booking.bookingID || "",
+    isRead: "no",
+    timestamp: String(now.getTime()),
+    notifMessage,
+  };
+
+  await set(notifRef, data);
+}
 
 const content = document.getElementById("page-content");
 
@@ -180,8 +239,15 @@ document.getElementById("allDatesBtn").addEventListener("click", () => {
 });
 
 function updateDateButtonsUI() {
-  document.getElementById("todayBtn").classList.toggle("active", filterByDate && selectedDateStr === formatBookingDateStr(new Date()));
-  document.getElementById("allDatesBtn").classList.toggle("active", !filterByDate);
+  document
+    .getElementById("todayBtn")
+    .classList.toggle(
+      "active",
+      filterByDate && selectedDateStr === formatBookingDateStr(new Date()),
+    );
+  document
+    .getElementById("allDatesBtn")
+    .classList.toggle("active", !filterByDate);
 }
 
 // Wire View Mode Switcher
@@ -326,10 +392,11 @@ function renderSlotGrid(container, bookingsList) {
       const slotRecord = facilitySlots[slotTime];
 
       const matchingBooking = dataBookings.find((b) => {
-        const slotStr = b.requestBookingTimeIn && b.requestBookingsTimeOut
-          ? `${b.requestBookingTimeIn} - ${b.requestBookingsTimeOut}`
-          : (b.slot || "");
-        
+        const slotStr =
+          b.requestBookingTimeIn && b.requestBookingsTimeOut
+            ? `${b.requestBookingTimeIn} - ${b.requestBookingsTimeOut}`
+            : b.slot || "";
+
         return (
           b.bookerSport === facility &&
           (filterByDate ? b.requestBookingDate === selectedDateStr : true) &&
@@ -337,12 +404,19 @@ function renderSlotGrid(container, bookingsList) {
         );
       });
 
-      const isTaken = !!slotRecord || (matchingBooking && (matchingBooking.bookingStatus || "confirmed").toLowerCase() === "confirmed");
-      const isCancelled = matchingBooking && matchingBooking.bookingStatus === "cancelled";
+      const isTaken =
+        !!slotRecord ||
+        (matchingBooking &&
+          (matchingBooking.bookingStatus || "confirmed").toLowerCase() ===
+            "confirmed");
+      const isCancelled =
+        matchingBooking && matchingBooking.bookingStatus === "cancelled";
 
       if (isTaken && !isCancelled) {
-        const bookerName = slotRecord?.bookerName || matchingBooking?.bookerName || "Reserved";
-        const bookingID = slotRecord?.bookingID || matchingBooking?.bookingID || "";
+        const bookerName =
+          slotRecord?.bookerName || matchingBooking?.bookerName || "Reserved";
+        const bookingID =
+          slotRecord?.bookingID || matchingBooking?.bookingID || "";
         const purpose = matchingBooking?.bookerPurpose || "Resident Booking";
 
         html += `
@@ -429,9 +503,10 @@ function renderTableView(container, bookingsList) {
   sorted.forEach((b) => {
     const status = (b.bookingStatus || "confirmed").toLowerCase();
     const isCancelled = status === "cancelled";
-    const slotStr = b.requestBookingTimeIn && b.requestBookingsTimeOut
-      ? `${b.requestBookingTimeIn} - ${b.requestBookingsTimeOut}`
-      : (b.slot || "—");
+    const slotStr =
+      b.requestBookingTimeIn && b.requestBookingsTimeOut
+        ? `${b.requestBookingTimeIn} - ${b.requestBookingsTimeOut}`
+        : b.slot || "—";
 
     let badgeClass = "badge-success";
     if (isCancelled) badgeClass = "badge-danger";
@@ -512,11 +587,13 @@ function openBookingDetailModal(bookingID) {
     return;
   }
 
-  const slotStr = booking.requestBookingTimeIn && booking.requestBookingsTimeOut
-    ? `${booking.requestBookingTimeIn} - ${booking.requestBookingsTimeOut}`
-    : (booking.slot || "—");
+  const slotStr =
+    booking.requestBookingTimeIn && booking.requestBookingsTimeOut
+      ? `${booking.requestBookingTimeIn} - ${booking.requestBookingsTimeOut}`
+      : booking.slot || "—";
 
-  const isCancelled = (booking.bookingStatus || "").toLowerCase() === "cancelled";
+  const isCancelled =
+    (booking.bookingStatus || "").toLowerCase() === "cancelled";
 
   const overlay = openModal({
     title: `Reservation Details #${booking.bookingID || ""}`,
@@ -595,13 +672,20 @@ function openBookingDetailModal(bookingID) {
     `,
   });
 
-  overlay.querySelector('[data-act="close"]').addEventListener("click", () => overlay.close());
+  overlay
+    .querySelector('[data-act="close"]')
+    .addEventListener("click", () => overlay.close());
 
   const cancelBtn = overlay.querySelector('[data-act="cancel-booking"]');
   if (cancelBtn) {
     cancelBtn.addEventListener("click", () => {
       overlay.close();
-      openCancelModal(booking.bookingID, booking.bookerSport, booking.requestBookingDate, slotStr);
+      openCancelModal(
+        booking.bookingID,
+        booking.bookerSport,
+        booking.requestBookingDate,
+        slotStr,
+      );
     });
   }
 }
@@ -629,43 +713,70 @@ function openCancelModal(bookingID, facility, dateStr, slotStr) {
     `,
   });
 
-  overlay.querySelector('[data-act="keep"]').addEventListener("click", () => overlay.close());
+  overlay
+    .querySelector('[data-act="keep"]')
+    .addEventListener("click", () => overlay.close());
 
-  overlay.querySelector('[data-act="confirm-cancel"]').addEventListener("click", async () => {
-    const reasonInput = overlay.querySelector("#cancelReasonInput");
-    const reason = reasonInput ? reasonInput.value.trim() || "Cancelled by HOA Admin" : "Cancelled by HOA Admin";
+  overlay
+    .querySelector('[data-act="confirm-cancel"]')
+    .addEventListener("click", async () => {
+      const reasonInput = overlay.querySelector("#cancelReasonInput");
+      const reason = reasonInput
+        ? reasonInput.value.trim() || "Cancelled by HOA Admin"
+        : "Cancelled by HOA Admin";
 
-    try {
-      // 1. Delete from BookingSlots node: BookingSlots > [facility] > [dateStr] > [slotStr]
-      if (facility && dateStr && slotStr) {
-        const slotPath = `${DB_PATHS.bookingSlots}/${facility}/${dateStr}/${slotStr}`;
-        await remove(ref(db, slotPath));
-      }
+      try {
+        // 1. Delete from BookingSlots node: BookingSlots > [facility] > [dateStr] > [slotStr]
+        if (facility && dateStr && slotStr) {
+          const slotPath = `${DB_PATHS.bookingSlots}/${facility}/${dateStr}/${slotStr}`;
+          await remove(ref(db, slotPath));
+        }
 
-      // 2. Update Bookings node: Bookings > [bookingID]
-      if (bookingID) {
-        const nowFormatted = formatDateTime(new Date());
-        const bookingPath = `${DB_PATHS.bookings}/${bookingID}`;
-        await update(ref(db, bookingPath), {
-          bookingStatus: "cancelled",
-          cancelledDate: nowFormatted,
-          adminRemarks: reason,
+        // 2. Update Bookings node: Bookings > [bookingID]
+        if (bookingID) {
+          const nowFormatted = formatDateTime(new Date());
+          const bookingPath = `${DB_PATHS.bookings}/${bookingID}`;
+          await update(ref(db, bookingPath), {
+            bookingStatus: "cancelled",
+            cancelledDate: nowFormatted,
+            adminRemarks: reason,
+          });
+
+          // 3. Notify the booker, same as the Android app — only when we can
+          // find the booking record to notify about.
+          const booking = dataBookings.find((b) => b.bookingID === bookingID);
+          if (booking) {
+            try {
+              await notifyBooker(booking, reason);
+            } catch (notifErr) {
+              console.error("Failed to create notification:", notifErr);
+            }
+          }
+        }
+
+        overlay.close();
+        toast({
+          type: "success",
+          title: "Reservation cancelled and slot released!",
+        });
+      } catch (err) {
+        console.error("Cancellation error:", err);
+        toast({
+          type: "danger",
+          title: "Failed to cancel reservation: " + err.message,
         });
       }
-
-      overlay.close();
-      toast({ type: "success", title: "Reservation cancelled and slot released!" });
-    } catch (err) {
-      console.error("Cancellation error:", err);
-      toast({ type: "danger", title: "Failed to cancel reservation: " + err.message });
-    }
-  });
+    });
 }
 
 // Open Print Range Modal
 function openPrintRangeModal() {
-  const defaultStart = formatDateForInput(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000));
-  const defaultEnd = formatDateForInput(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
+  const defaultStart = formatDateForInput(
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+  );
+  const defaultEnd = formatDateForInput(
+    new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+  );
 
   const overlay = openModal({
     title: "Print Facility Reservations Report",
@@ -698,7 +809,9 @@ function openPrintRangeModal() {
     `,
   });
 
-  overlay.querySelector('[data-act="cancel"]').addEventListener("click", () => overlay.close());
+  overlay
+    .querySelector('[data-act="cancel"]')
+    .addEventListener("click", () => overlay.close());
 
   overlay.querySelector('[data-act="print"]').addEventListener("click", () => {
     const startVal = overlay.querySelector("#printStartDate").value;
@@ -709,7 +822,9 @@ function openPrintRangeModal() {
     const endDate = endVal ? new Date(endVal + "T23:59:59") : null;
 
     const filtered = dataBookings.filter((b) => {
-      const reqObj = b.requestBookingDate ? new Date(b.requestBookingDate) : null;
+      const reqObj = b.requestBookingDate
+        ? new Date(b.requestBookingDate)
+        : null;
       if (startDate && reqObj && reqObj < startDate) return false;
       if (endDate && reqObj && reqObj > endDate) return false;
       if (facVal !== "all" && b.bookerSport !== facVal) return false;
@@ -743,9 +858,10 @@ function openPrintRangeModal() {
       bodyHTML += `<tr><td colspan="8" style="text-align:center; padding:20px;">No bookings found matching selected parameters.</td></tr>`;
     } else {
       filtered.forEach((b) => {
-        const slotStr = b.requestBookingTimeIn && b.requestBookingsTimeOut
-          ? `${b.requestBookingTimeIn} - ${b.requestBookingsTimeOut}`
-          : (b.slot || "—");
+        const slotStr =
+          b.requestBookingTimeIn && b.requestBookingsTimeOut
+            ? `${b.requestBookingTimeIn} - ${b.requestBookingsTimeOut}`
+            : b.slot || "—";
 
         bodyHTML += `
           <tr>
