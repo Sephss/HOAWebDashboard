@@ -71,6 +71,7 @@ let dataStore = {
   grievances: [],
   maintenance: [],
   announcements: [],
+  bookings: [],
 };
 
 function bindLive(path, key) {
@@ -85,6 +86,7 @@ function loadAll() {
   bindLive(DB_PATHS.grievanceReports, "grievances");
   bindLive(DB_PATHS.maintenanceRequests, "maintenance");
   bindLive(DB_PATHS.announcements, "announcements");
+  bindLive(DB_PATHS.bookings, "bookings");
 }
 loadAll();
 
@@ -109,21 +111,10 @@ function renderUserStats() {
   const approved = users.filter((u) =>
     isYes(u.isAccountApprovedByAdmin),
   ).length;
-  const pending = total - approved;
-  const disabled = users.filter((u) => isYes(u.isAccountDisabled)).length;
-  const banned = users.filter((u) => isYes(u.isAccountBanned)).length;
 
   const cards = [
     { label: "Total Users", value: total, icon: iconUsers(), trend: null },
     { label: "Approved Users", value: approved, icon: iconCheck(), tone: "up" },
-    {
-      label: "Pending Approval",
-      value: pending,
-      icon: iconClock(),
-      tone: pending > 0 ? "down" : null,
-    },
-    { label: "Disabled Users", value: disabled, icon: iconSlash() },
-    { label: "Banned Users", value: banned, icon: iconBan() },
   ];
   document.getElementById("userStatGrid").innerHTML = cards
     .map(statCardHTML)
@@ -200,6 +191,14 @@ function renderActivity() {
       status: "approved",
     }),
   );
+  dataStore.bookings.forEach((b) =>
+    events.push({
+      type: "booking",
+      label: `Booking — ${b.bookerSport || "Facility"} by ${b.bookerName || "resident"}`,
+      ts: b.timestamp || b.requestBookingDate || b.dateBooked,
+      status: statusToken(b.bookingStatus),
+    }),
+  );
 
   events.sort((a, b) => (toMs(b.ts) || 0) - (toMs(a.ts) || 0));
   const top = events.slice(0, 10);
@@ -215,7 +214,7 @@ function renderActivity() {
   el.innerHTML = top
     .map(
       (e, i) => `
-    <div class="timeline__item ${i === 0 ? "active" : e.status === "approved" || e.status === "resolved" ? "done" : ""}">
+    <div class="timeline__item ${i === 0 ? "active" : e.status === "approved" || e.status === "resolved" || e.status === "confirmed" ? "done" : ""}">
       <div class="timeline__dot"></div>
       <div class="timeline__title">${e.label}</div>
       <div class="timeline__meta">${timeAgo(e.ts)} · ${formatDateTime(e.ts)}</div>
@@ -232,6 +231,7 @@ function renderActivity() {
    documents -> requestStatus "approved"
    grievances -> incidentStatus "resolved"
    maintenance -> maintenanceStatus "completed"
+   bookings -> bookingStatus "confirmed"
    ============================================================ */
 
 function openReportModal() {
@@ -267,6 +267,7 @@ function openReportModal() {
           <label class="checkbox-row"><input type="checkbox" id="includeDocs" checked> Document Requests — <strong style="color:var(--color-black);">Approved</strong> only</label>
           <label class="checkbox-row"><input type="checkbox" id="includeGrievances" checked> Grievance Reports — <strong style="color:var(--color-black);">Resolved</strong> only</label>
           <label class="checkbox-row"><input type="checkbox" id="includeMaintenance" checked> Maintenance Requests — <strong style="color:var(--color-black);">Completed</strong> only</label>
+          <label class="checkbox-row"><input type="checkbox" id="includeBookings" checked> Bookings — <strong style="color:var(--color-black);">Confirmed</strong> only</label>
         </div>
       </div>
     `,
@@ -306,8 +307,14 @@ function openReportModal() {
         docs: overlay.querySelector("#includeDocs").checked,
         grievances: overlay.querySelector("#includeGrievances").checked,
         maintenance: overlay.querySelector("#includeMaintenance").checked,
+        bookings: overlay.querySelector("#includeBookings").checked,
       };
-      if (!includes.docs && !includes.grievances && !includes.maintenance) {
+      if (
+        !includes.docs &&
+        !includes.grievances &&
+        !includes.maintenance &&
+        !includes.bookings
+      ) {
         toast({
           type: "warning",
           title: "Nothing selected",
@@ -429,6 +436,13 @@ function generateReport(range, includes, customRange) {
           inRange(resolveRecordMs(m, "dateSubmitted", "timestamp")),
       )
     : [];
+  const bookings = includes.bookings
+    ? dataStore.bookings.filter(
+        (b) =>
+          statusIs(b.bookingStatus, "confirmed") &&
+          inRange(resolveRecordMs(b, "requestBookingDate", "timestamp")),
+      )
+    : [];
 
   const sections = [];
 
@@ -438,10 +452,6 @@ function generateReport(range, includes, customRange) {
         title: `Document Requests — Approved (${docs.length})`,
         rows: docs,
         columns: [
-          {
-            label: "Ticket",
-            value: (r) => r.requestTicket || r.requestID || r.id,
-          },
           { label: "Requester", value: (r) => r.requesterName },
           { label: "Document Type", value: (r) => r.documentType },
           { label: "Purpose", value: (r) => r.purpose },
@@ -492,12 +502,37 @@ function generateReport(range, includes, customRange) {
     );
   }
 
-  const totalCount = docs.length + grievances.length + maintenance.length;
+  if (includes.bookings) {
+    sections.push(
+      reportSection({
+        title: `Bookings — Confirmed (${bookings.length})`,
+        rows: bookings,
+        columns: [
+          { label: "Booker", value: (r) => r.bookerName },
+          { label: "Sport", value: (r) => r.bookerSport },
+          { label: "Purpose", value: (r) => r.bookerPurpose },
+          {
+            label: "Time",
+            value: (r) =>
+              r.requestBookingTimeIn && r.requestBookingsTimeOut
+                ? `${r.requestBookingTimeIn} – ${r.requestBookingsTimeOut}`
+                : r.timeBooked,
+          },
+          { label: "Date", value: (r) => r.requestBookingDate || r.dateBooked },
+        ],
+        emptyText: `No confirmed bookings for ${rangeLabel}.`,
+      }),
+    );
+  }
+
+  const totalCount =
+    docs.length + grievances.length + maintenance.length + bookings.length;
   const summaryHTML = `
     <div style="display:flex;gap:24px;margin-bottom:24px;padding:14px 16px;background:#F7F9FA;border-radius:8px;">
       ${includes.docs ? `<div><div style="font-size:20px;font-weight:800;color:#013717;">${docs.length}</div><div style="font-size:11px;color:#5C5F61;">Approved Documents</div></div>` : ""}
       ${includes.grievances ? `<div><div style="font-size:20px;font-weight:800;color:#013717;">${grievances.length}</div><div style="font-size:11px;color:#5C5F61;">Resolved Grievances</div></div>` : ""}
       ${includes.maintenance ? `<div><div style="font-size:20px;font-weight:800;color:#013717;">${maintenance.length}</div><div style="font-size:11px;color:#5C5F61;">Completed Maintenance</div></div>` : ""}
+      ${includes.bookings ? `<div><div style="font-size:20px;font-weight:800;color:#013717;">${bookings.length}</div><div style="font-size:11px;color:#5C5F61;">Confirmed Bookings</div></div>` : ""}
       <div><div style="font-size:20px;font-weight:800;color:#013717;">${totalCount}</div><div style="font-size:11px;color:#5C5F61;">Total Records</div></div>
     </div>
   `;

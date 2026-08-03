@@ -841,7 +841,6 @@ function openPrintRangeModal() {
       <table>
         <thead>
           <tr>
-            <th>Booking ID</th>
             <th>Booker Name</th>
             <th>Facility / Sport</th>
             <th>Reserved Date</th>
@@ -865,7 +864,7 @@ function openPrintRangeModal() {
 
         bodyHTML += `
           <tr>
-            <td>${escapeHtml(b.bookingID || "—")}</td>
+          
             <td><strong>${escapeHtml(b.bookerName || "—")}</strong></td>
             <td>${escapeHtml(b.bookerSport || "—")}</td>
             <td>${escapeHtml(b.requestBookingDate || "—")}</td>

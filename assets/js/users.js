@@ -66,7 +66,7 @@ const table = new DataTable({
       sortValue: (r) => getFullName(r).toLowerCase(),
       render: (r) => `
         <div class="cell-user">
-          <div class="avatar" style="width:34px;height:34px;font-size:12px;">${r.profileImage ? `<img src="${escapeHtml(r.profileImage)}" alt="">` : initials(getFullName(r))}</div>
+          <div class="avatar" style="width:34px;height:34px;font-size:12px;">${avatarInnerHTML(r)}</div>
           <div>
             <div class="cell-user__name">${escapeHtml(getFullName(r) || "Unnamed")}</div>
             <div class="cell-user__sub">${escapeHtml(r.email || "")}</div>
@@ -120,14 +120,6 @@ const table = new DataTable({
     { key: "block", label: "Block" },
     { key: "lot", label: "Lot" },
     { key: "street", label: "Street" },
-    { key: "isAccountApprovedByAdmin", label: "Approved" },
-    { key: "isAccountDisabled", label: "Disabled" },
-    { key: "isAccountBanned", label: "Banned" },
-    {
-      key: "dateRegistered",
-      label: "Registered",
-      csvValue: (r) => formatDate(r.dateRegistered || r.timestamp),
-    },
   ],
   filters: [
     {
@@ -396,7 +388,7 @@ function openProfileModal(r) {
     size: "modal-lg",
     bodyHTML: `
       <div class="profile-hero">
-        <div class="avatar">${r.profileImage ? `<img src="${escapeHtml(r.profileImage)}" alt="">` : initials(getFullName(r))}</div>
+        <div class="avatar">${avatarInnerHTML(r)}</div>
         <div>
           <div class="profile-hero__name">${escapeHtml(getFullName(r) || "Unnamed Resident")}</div>
           <div class="profile-hero__email">${escapeHtml(r.email || "No email on file")}</div>
@@ -415,7 +407,7 @@ function openProfileModal(r) {
         <div class="detail-item"><div class="label">Lot</div><div class="value">${escapeHtml(r.lot || "—")}</div></div>
         <div class="detail-item"><div class="label">Street</div><div class="value">${escapeHtml(r.street || "—")}</div></div>
         <div class="detail-item"><div class="label">Phase Type</div><div class="value">${escapeHtml(r.phaseType || r.lavanyaPhaseType || "—")}</div></div>
-        <div class="detail-item"><div class="label">Date Registered</div><div class="value">${formatDateTime(r.dateRegistered || r.timestamp)}</div></div>
+       
         <div class="detail-item"><div class="label">Account UID</div><div class="value mono" style="font-size:11px;word-break:break-all;">${escapeHtml(r.id || r.uid || "—")}</div></div>
       </div>
     `,
@@ -446,6 +438,21 @@ function openProfileModal(r) {
       overlay.close();
       await handleUserAction("unban", r);
     });
+}
+
+/**
+ * Resolve the resident's avatar markup.
+ * The DB stores an `imageUrl` child that is either a real image URL or the
+ * literal string "none" when the resident hasn't uploaded a photo. Only
+ * treat it as a real image when it's present and isn't "none" — anything
+ * else falls back to the existing initials avatar.
+ */
+function avatarInnerHTML(r) {
+  const url = String(r.imageUrl || "").trim();
+  if (url && url.toLowerCase() !== "none") {
+    return `<img src="${escapeHtml(url)}" alt="">`;
+  }
+  return initials(getFullName(r));
 }
 
 /* ---- small inline icons for dropdown items ---- */
