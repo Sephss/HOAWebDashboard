@@ -83,7 +83,15 @@ export const DB_PATHS = {
 };
 
 /** Roles allowed to sign in to this dashboard. */
-export const ALLOWED_ROLES = ["Admin", "HOA Official", "HOA Officials"];
+export const ALLOWED_ROLES = [
+  "Admin",
+  "admin",
+  "President",
+  "Vice President",
+  "Secretary",
+  "Treasurer",
+  "Auditor",
+];
 
 /** Roles explicitly denied dashboard access. */
 export const DENIED_ROLES = ["Home Owners", "Renters", "Homeowner", "Renter"];
