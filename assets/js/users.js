@@ -115,7 +115,7 @@ const table = new DataTable({
       key: "residentType",
       label: "Resident Type",
       csvValue: (r) =>
-        humanize(r.residentType || r.userType || r.accountType || ""),
+        humanize(r.residentType || r.userType || r.accountType || r.role || ""),
     },
     { key: "block", label: "Block" },
     { key: "lot", label: "Lot" },
@@ -130,6 +130,7 @@ const table = new DataTable({
         { value: "approved", label: "Approved" },
         { value: "disabled", label: "Disabled" },
         { value: "banned", label: "Banned" },
+        { value: "archived", label: "Archived" },
       ],
       match: (r, v) => {
         if (v === "pending") return !isYes(r.isAccountApprovedByAdmin);
@@ -141,6 +142,7 @@ const table = new DataTable({
           );
         if (v === "disabled") return isYes(r.isAccountDisabled);
         if (v === "banned") return isYes(r.isAccountBanned);
+        if (v === "archived") return isYes(r.isArchived);
         return true;
       },
     },
@@ -157,6 +159,7 @@ const table = new DataTable({
           r.residentType ||
           r.userType ||
           r.accountType ||
+          r.role ||
           ""
         )
           .toLowerCase()
@@ -174,6 +177,25 @@ const table = new DataTable({
   onRowClick: (row) => openProfileModal(row),
 });
 
+/**
+ * Archived residents (isArchived: "yes") are excluded from the table by
+ * default. They only appear when the "Archived" status filter is
+ * explicitly selected. This wraps the DataTable's internal _apply() so the
+ * base dataset is recomputed from the *full* allUsers list every time a
+ * search/sort/filter change triggers a re-apply — otherwise switching the
+ * status filter to "Archived" would have nothing to show, since the
+ * archived rows would already have been excluded from table.allRows.
+ */
+const originalApply = table._apply.bind(table);
+table._apply = () => {
+  const statusFilter = table.activeFilters.status;
+  table.allRows =
+    statusFilter === "archived"
+      ? allUsers.filter((u) => isYes(u.isArchived))
+      : allUsers.filter((u) => !isYes(u.isArchived));
+  originalApply();
+};
+
 onValue(ref(db, DB_PATHS.users), (snap) => {
   allUsers = objectToArray(snap.val());
   table.setData(allUsers);
@@ -190,14 +212,17 @@ if (qParam) {
   table.search = qParam.toLowerCase();
 }
 
+/** Stats reflect only active (non-archived) accounts, matching what the
+ * table shows by default. */
 function renderSummary() {
-  const total = allUsers.length;
-  const approved = allUsers.filter((u) =>
+  const activeUsers = allUsers.filter((u) => !isYes(u.isArchived));
+  const total = activeUsers.length;
+  const approved = activeUsers.filter((u) =>
     isYes(u.isAccountApprovedByAdmin),
   ).length;
   const pending = total - approved;
-  const disabled = allUsers.filter((u) => isYes(u.isAccountDisabled)).length;
-  const banned = allUsers.filter((u) => isYes(u.isAccountBanned)).length;
+  const disabled = activeUsers.filter((u) => isYes(u.isAccountDisabled)).length;
+  const banned = activeUsers.filter((u) => isYes(u.isAccountBanned)).length;
   document.getElementById("userSummaryStats").innerHTML = [
     ["Total Users", total],
     ["Approved", approved],
@@ -217,7 +242,7 @@ function renderSummary() {
 
 function updatePendingBadge() {
   const pending = allUsers.filter(
-    (u) => !isYes(u.isAccountApprovedByAdmin),
+    (u) => !isYes(u.isArchived) && !isYes(u.isAccountApprovedByAdmin),
   ).length;
   const badge = document.getElementById("pendingBadge");
   badge.textContent = `${pending} pending approval`;
@@ -240,6 +265,8 @@ function statusBadges(r) {
     badges.push(`<span class="badge badge-neutral">Disabled</span>`);
   if (isYes(r.isAccountBanned))
     badges.push(`<span class="badge badge-danger">Banned</span>`);
+  if (isYes(r.isArchived))
+    badges.push(`<span class="badge badge-neutral">Archived</span>`);
   return `<div style="display:flex;gap:4px;flex-wrap:wrap;">${badges.join("")}</div>`;
 }
 
@@ -275,6 +302,7 @@ function buildActionMenu(r) {
   const approved = isYes(r.isAccountApprovedByAdmin);
   const disabled = isYes(r.isAccountDisabled);
   const banned = isYes(r.isAccountBanned);
+  const archived = isYes(r.isArchived);
   return `
     <button class="dropdown__item" data-act="view">${svgEye()}View profile</button>
     <div class="dropdown__divider"></div>
@@ -290,7 +318,14 @@ function buildActionMenu(r) {
         : `<button class="dropdown__item danger" data-act="ban">${svgBan()}Ban account</button>`
     }
     <div class="dropdown__divider"></div>
+    ${
+      archived
+        ? `<button class="dropdown__item" data-act="unarchive">${svgCheck()}Unarchive account</button>`
+        : `<button class="dropdown__item" data-act="archive">${svgArchive()}Archive account</button>`
+    }
+    <!-- Delete account temporarily disabled — do not re-enable without checking with the team.
     <button class="dropdown__item danger" data-act="delete">${svgTrash()}Delete account</button>
+    -->
   `;
 }
 
@@ -301,6 +336,7 @@ function wireActionMenu(menu, row) {
       menu.classList.remove("open");
       const act = btn.dataset.act;
       if (act === "view") return openProfileModal(row);
+      if (act === "archive") return openArchiveReasonModal(row);
       await handleUserAction(act, row);
     });
   });
@@ -339,18 +375,27 @@ async function handleUserAction(act, row) {
       tone: "success",
       confirmLabel: "Unban",
     },
+    unarchive: {
+      title: "Unarchive account",
+      message: `Restore <strong>${escapeHtml(name)}</strong>'s account from the archive? It will reappear in the main resident list.`,
+      tone: "success",
+      confirmLabel: "Unarchive",
+    },
+    /* Delete account temporarily disabled — do not re-enable without checking with the team.
     delete: {
       title: "Delete account",
       message: `Permanently delete <strong>${escapeHtml(name)}</strong>'s account record? This cannot be undone.`,
       tone: "danger",
       confirmLabel: "Delete Permanently",
     },
+    */
   };
   const cfg = confirmMap[act];
   const ok = await confirmDialog(cfg);
   if (!ok) return;
 
   try {
+    /* Delete account temporarily disabled — do not re-enable without checking with the team.
     if (act === "delete") {
       await remove(ref(db, `${DB_PATHS.users}/${row.id}`));
       toast({
@@ -360,12 +405,19 @@ async function handleUserAction(act, row) {
       });
       return;
     }
+    */
     const updates = {
       approve: { isAccountApprovedByAdmin: "yes" },
       disable: { isAccountDisabled: "yes" },
       enable: { isAccountDisabled: "no" },
       ban: { isAccountBanned: "yes" },
       unban: { isAccountBanned: "no" },
+      unarchive: {
+        isArchived: "no",
+        archivedAt: "none",
+        archivedBy: "none",
+        archivedReason: "none",
+      },
     }[act];
     await update(ref(db, `${DB_PATHS.users}/${row.id}`), updates);
     toast({
@@ -378,10 +430,79 @@ async function handleUserAction(act, row) {
   }
 }
 
+/** Archiving requires a reason, so it gets its own modal instead of the
+ * generic confirmDialog used by the other account actions. */
+function openArchiveReasonModal(row) {
+  const name = getFullName(row) || "this user";
+  const overlay = openModal({
+    title: "Archive account",
+    subtitle: `Archive ${name}'s account`,
+    bodyHTML: `
+      <div class="field" id="archiveReasonField">
+        <label>Reason for archiving</label>
+        <textarea class="textarea" id="archiveReasonInput" placeholder="e.g. Moved out, duplicate account, resident's request…"></textarea>
+        <span class="field-error">Please enter a reason.</span>
+      </div>
+    `,
+    footerHTML: `
+      <button class="btn btn-secondary" data-act="cancel">Cancel</button>
+      <button class="btn btn-danger" data-act="confirm">Archive Account</button>
+    `,
+  });
+
+  overlay
+    .querySelector('[data-act="cancel"]')
+    .addEventListener("click", () => overlay.close());
+
+  overlay
+    .querySelector('[data-act="confirm"]')
+    .addEventListener("click", async () => {
+      const field = overlay.querySelector("#archiveReasonField");
+      const reason = overlay.querySelector("#archiveReasonInput").value.trim();
+      field.classList.remove("has-error");
+      if (!reason) {
+        field.classList.add("has-error");
+        return;
+      }
+
+      try {
+        await update(ref(db, `${DB_PATHS.users}/${row.id}`), {
+          isArchived: "yes",
+          archivedAt: formatAdminActionTimestamp(),
+          archivedBy: adminProfile.role || "Admin",
+          archivedReason: reason,
+        });
+        toast({
+          type: "success",
+          title: "Account archived",
+          desc: `${name}'s account was archived.`,
+        });
+        overlay.close();
+      } catch (err) {
+        toast({ type: "danger", title: "Archive failed", desc: err.message });
+      }
+    });
+}
+
+/** Matches the "MMMM dd, yyyy, hh:mm a" style used for status-change
+ * timestamps elsewhere in this dashboard (e.g. documents.js). */
+function formatAdminActionTimestamp(date = new Date()) {
+  const month = date.toLocaleDateString("en-US", { month: "long" });
+  const day = date.getDate();
+  const year = date.getFullYear();
+  let hour = date.getHours();
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  const period = hour >= 12 ? "PM" : "AM";
+  hour = hour % 12;
+  if (hour === 0) hour = 12;
+  return `${month} ${day}, ${year}, ${hour}:${minute} ${period}`;
+}
+
 function openProfileModal(r) {
   const approved = isYes(r.isAccountApprovedByAdmin);
   const disabled = isYes(r.isAccountDisabled);
   const banned = isYes(r.isAccountBanned);
+  const archived = isYes(r.isArchived);
 
   const overlay = openModal({
     title: "Resident Profile",
@@ -397,6 +518,7 @@ function openProfileModal(r) {
             ${!approved ? `<span class="badge badge-pending">Pending</span>` : `<span class="badge badge-approved">Approved</span>`}
             ${disabled ? `<span class="badge badge-neutral">Disabled</span>` : ""}
             ${banned ? `<span class="badge badge-danger">Banned</span>` : ""}
+            ${archived ? `<span class="badge badge-neutral">Archived</span>` : ""}
           </div>
         </div>
       </div>
@@ -409,12 +531,22 @@ function openProfileModal(r) {
         <div class="detail-item"><div class="label">Phase Type</div><div class="value">${escapeHtml(r.phaseType || r.lavanyaPhaseType || "—")}</div></div>
        
         <div class="detail-item"><div class="label">Account UID</div><div class="value mono" style="font-size:11px;word-break:break-all;">${escapeHtml(r.id || r.uid || "—")}</div></div>
+        ${
+          archived
+            ? `
+        <div class="detail-item"><div class="label">Archived At</div><div class="value">${escapeHtml(r.archivedAt || "—")}</div></div>
+        <div class="detail-item"><div class="label">Archived By</div><div class="value">${escapeHtml(r.archivedBy || "—")}</div></div>
+        <div class="detail-item"><div class="label">Archived Reason</div><div class="value">${escapeHtml(r.archivedReason || "—")}</div></div>
+        `
+            : ""
+        }
       </div>
     `,
     footerHTML: `
       <button class="btn btn-secondary" data-act="close">Close</button>
       ${!approved ? `<button class="btn btn-success" data-act="approve">Approve Registration</button>` : ""}
       ${banned ? `<button class="btn btn-success" data-act="unban">Unban Account</button>` : `<button class="btn btn-danger" data-act="ban">Ban Account</button>`}
+      ${archived ? `<button class="btn btn-success" data-act="unarchive">Unarchive Account</button>` : `<button class="btn btn-secondary" data-act="archive">Archive Account</button>`}
     `,
   });
   overlay
@@ -437,6 +569,18 @@ function openProfileModal(r) {
     ?.addEventListener("click", async () => {
       overlay.close();
       await handleUserAction("unban", r);
+    });
+  overlay
+    .querySelector('[data-act="archive"]')
+    ?.addEventListener("click", () => {
+      overlay.close();
+      openArchiveReasonModal(r);
+    });
+  overlay
+    .querySelector('[data-act="unarchive"]')
+    ?.addEventListener("click", async () => {
+      overlay.close();
+      await handleUserAction("unarchive", r);
     });
 }
 
@@ -467,6 +611,9 @@ function svgSlash() {
 }
 function svgBan() {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 8l8 8" stroke-linecap="round"/></svg>`;
+}
+function svgArchive() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 8v13H3V8" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 3h22v5H1z" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 12h4" stroke-linecap="round"/></svg>`;
 }
 function svgTrash() {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0l-1 14a2 2 0 01-2 2H7a2 2 0 01-2-2L4 6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
