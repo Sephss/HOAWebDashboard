@@ -885,7 +885,7 @@ function printSingleBooking(booking, slotStr) {
       </tbody>
     </table>
   `;
-  printHTML(`Reservation #${booking.bookingID || ""}`, bodyHTML);
+  printHTML(`Reservation Details`, bodyHTML);
 }
 
 // Open Status Reason Modal — shared by Deny / Cancel / Refund.
