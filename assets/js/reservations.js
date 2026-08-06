@@ -3,6 +3,13 @@
    Synchronizes with Firebase Realtime Database:
    - `Bookings`: Master booking records
    - `BookingSlots`: Slot availability grid [Sport > Date > Slot]
+
+   Status flow: mobile app now creates bookings as "pending".
+   Admin resolves them here via Approve / Deny / Cancel / Refund.
+   Approving stamps bookingORNumber + bookingAmount +
+   whoUpdatedTheBookingStatus (mirrored onto BookingSlots too).
+   Deny/Cancel/Refund free the slot and stamp the same "who" field
+   on the Bookings record via the shared reason modal.
    ============================================================ */
 import { guardPage } from "./auth.js";
 import { renderShell } from "./sidebar.js";
@@ -50,6 +57,42 @@ const ALL_SLOTS = [
   "5:00 PM - 8:00 PM",
 ];
 
+/** Non-approve status actions available from the booking detail dropdown.
+ * Each maps to the bookingStatus token written to Firebase, plus the
+ * copy used by the shared reason modal and resident notification. */
+const STATUS_ACTIONS = {
+  deny: {
+    status: "denied",
+    title: "Deny Facility Reservation",
+    banner:
+      "This action will remove the slot from <code>BookingSlots</code> to allow other residents to book, and mark the booking record as <strong>denied</strong>.",
+    confirmLabel: "Confirm Denial",
+    defaultReason: "Denied by HOA Admin",
+    notifMessage: (b) =>
+      `Your facility reservation for ${b.bookerSport || "the facility"} on ${b.requestBookingDate || ""} has been denied.`,
+  },
+  cancel: {
+    status: "cancelled",
+    title: "Cancel Facility Reservation",
+    banner:
+      "This action will remove the slot from <code>BookingSlots</code> to allow other residents to book, and mark the booking record as <strong>cancelled</strong>.",
+    confirmLabel: "Confirm Cancellation",
+    defaultReason: "Cancelled by HOA Admin",
+    notifMessage: (b) =>
+      `Your facility reservation for ${b.bookerSport || "the facility"} on ${b.requestBookingDate || ""} has been cancelled.`,
+  },
+  refund: {
+    status: "refunded",
+    title: "Refund Facility Reservation",
+    banner:
+      "This action will remove the slot from <code>BookingSlots</code> to allow other residents to book, and mark the booking record as <strong>refunded</strong>.",
+    confirmLabel: "Confirm Refund",
+    defaultReason: "Refunded by HOA Admin",
+    notifMessage: (b) =>
+      `Your facility reservation for ${b.bookerSport || "the facility"} on ${b.requestBookingDate || ""} has been refunded.`,
+  },
+};
+
 /** Matches Android's SimpleDateFormat("MMMM dd, yyyy") in the Asia/Manila timezone. */
 function formatManilaDate(date = new Date()) {
   return new Intl.DateTimeFormat("en-US", {
@@ -70,13 +113,28 @@ function formatManilaTime(date = new Date()) {
   }).format(date);
 }
 
+/** Admin display name used for whoUpdatedTheBookingStatus — matches the
+ * firstName+lastName pattern used elsewhere in this dashboard. */
+function getAdminDisplayName() {
+  return (
+    [adminProfile.firstName, adminProfile.lastName].filter(Boolean).join(" ") ||
+    adminProfile.role ||
+    "Admin"
+  );
+}
+
+/** "none" is the mobile app's placeholder for an unset value — display it as a dash. */
+function displayOrDash(val) {
+  if (!val || String(val).toLowerCase() === "none") return "—";
+  return val;
+}
+
 /**
  * Writes a NotificationModel-shaped record to DB_PATHS.notifications,
  * mirroring FirebaseNotificationManager.createNotification() on Android —
  * same pattern used in documents.js's notifyRequester().
  */
-async function notifyBooker(booking, remarks) {
-  const notifMessage = `Your facility reservation for ${booking.bookerSport || "the facility"} on ${booking.requestBookingDate || ""} has been cancelled.`;
+async function notifyBooker(booking, remarks, notifMessage, actionToken) {
   const now = new Date();
 
   const notifRef = push(ref(db, DB_PATHS.notifications));
@@ -86,7 +144,7 @@ async function notifyBooker(booking, remarks) {
     title: "",
     message: remarks,
     notificationType: booking.bookerSport || "",
-    action: "cancelled",
+    action: actionToken,
     date: formatManilaDate(now),
     time: formatManilaTime(now),
     referenceID: booking.bookingID || "",
@@ -178,6 +236,25 @@ function formatDateForInput(dateObj) {
   const m = String(dateObj.getMonth() + 1).padStart(2, "0");
   const d = String(dateObj.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+/** Human label + badge class for any bookingStatus token, including the
+ * new pending/denied/refunded states alongside the existing ones. */
+function statusMeta(status) {
+  const token = (status || "confirmed").toLowerCase();
+  const map = {
+    pending: { label: "Pending", badge: "badge-pending" },
+    confirmed: { label: "Confirmed", badge: "badge-success" },
+    cancelled: { label: "Cancelled", badge: "badge-danger" },
+    denied: { label: "Denied", badge: "badge-danger" },
+    refunded: { label: "Refunded", badge: "badge-neutral" },
+  };
+  return (
+    map[token] || {
+      label: status ? status[0].toUpperCase() + status.slice(1) : "Unknown",
+      badge: "badge-neutral",
+    }
+  );
 }
 
 // Application State
@@ -338,18 +415,24 @@ function renderStatGrid() {
   const todayBookings = dataBookings.filter(
     (b) => b.requestBookingDate === todayStr,
   );
+  const pending = dataBookings.filter(
+    (b) => (b.bookingStatus || "").toLowerCase() === "pending",
+  );
   const confirmed = dataBookings.filter(
     (b) => (b.bookingStatus || "confirmed").toLowerCase() === "confirmed",
   );
-  const cancelled = dataBookings.filter(
-    (b) => (b.bookingStatus || "").toLowerCase() === "cancelled",
+  const cancelled = dataBookings.filter((b) =>
+    ["cancelled", "denied", "refunded"].includes(
+      (b.bookingStatus || "").toLowerCase(),
+    ),
   );
 
   const stats = [
     ["Total Reservations", dataBookings.length],
     ["Today's Bookings", todayBookings.length],
+    ["Pending Review", pending.length],
     ["Confirmed Total", confirmed.length],
-    ["Cancelled Total", cancelled.length],
+    ["Cancelled/Denied/Refunded", cancelled.length],
   ];
 
   grid.innerHTML = stats
@@ -404,25 +487,20 @@ function renderSlotGrid(container, bookingsList) {
         );
       });
 
-      const isTaken =
-        !!slotRecord ||
-        (matchingBooking &&
-          (matchingBooking.bookingStatus || "confirmed").toLowerCase() ===
-            "confirmed");
-      const isCancelled =
-        matchingBooking && matchingBooking.bookingStatus === "cancelled";
+      const isTaken = !!slotRecord;
 
-      if (isTaken && !isCancelled) {
+      if (isTaken) {
         const bookerName =
           slotRecord?.bookerName || matchingBooking?.bookerName || "Reserved";
         const bookingID =
           slotRecord?.bookingID || matchingBooking?.bookingID || "";
         const purpose = matchingBooking?.bookerPurpose || "Resident Booking";
+        const meta = statusMeta(matchingBooking?.bookingStatus);
 
         html += `
           <div style="border:1.5px solid var(--color-primary-100); background:var(--color-primary-50); border-radius:var(--radius-md); padding:14px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-              <span class="badge badge-success" style="font-size:11px;">Booked</span>
+              <span class="badge ${meta.badge}" style="font-size:11px;">${escapeHtml(meta.label)}</span>
               <small style="color:var(--color-grey); font-family:var(--font-mono); font-size:11px;">${escapeHtml(slotTime)}</small>
             </div>
             <div style="font-weight:600; color:var(--color-black); font-size:14px; margin-bottom:4px;">
@@ -433,7 +511,6 @@ function renderSlotGrid(container, bookingsList) {
             </div>
             <div style="display:flex; gap:6px;">
               <button class="btn btn-secondary btn-sm" style="flex:1; padding:4px 8px; font-size:11px;" data-act="details" data-id="${escapeHtml(bookingID)}">Details</button>
-              <button class="btn btn-danger btn-sm" style="padding:4px 8px; font-size:11px;" data-act="cancel" data-id="${escapeHtml(bookingID)}" data-facility="${escapeHtml(facility)}" data-date="${escapeHtml(selectedDateStr)}" data-slot="${escapeHtml(slotTime)}">Cancel</button>
             </div>
           </div>
         `;
@@ -501,15 +578,11 @@ function renderTableView(container, bookingsList) {
   `;
 
   sorted.forEach((b) => {
-    const status = (b.bookingStatus || "confirmed").toLowerCase();
-    const isCancelled = status === "cancelled";
+    const meta = statusMeta(b.bookingStatus);
     const slotStr =
       b.requestBookingTimeIn && b.requestBookingsTimeOut
         ? `${b.requestBookingTimeIn} - ${b.requestBookingsTimeOut}`
         : b.slot || "—";
-
-    let badgeClass = "badge-success";
-    if (isCancelled) badgeClass = "badge-danger";
 
     html += `
       <tr>
@@ -531,7 +604,7 @@ function renderTableView(container, bookingsList) {
           </div>
         </td>
         <td>
-          <span class="badge ${badgeClass}">${escapeHtml(b.bookingStatus || "Confirmed")}</span>
+          <span class="badge ${meta.badge}">${escapeHtml(meta.label)}</span>
         </td>
         <td>
           <small style="color:var(--color-grey);">${escapeHtml(b.dateBooked || "—")} ${escapeHtml(b.timeBooked || "")}</small>
@@ -539,11 +612,6 @@ function renderTableView(container, bookingsList) {
         <td style="text-align:right;">
           <div style="display:inline-flex; gap:6px;">
             <button class="btn btn-secondary btn-sm" data-act="details" data-id="${escapeHtml(b.bookingID)}">Details</button>
-            ${
-              !isCancelled
-                ? `<button class="btn btn-danger btn-sm" data-act="cancel" data-id="${escapeHtml(b.bookingID)}" data-facility="${escapeHtml(b.bookerSport)}" data-date="${escapeHtml(b.requestBookingDate)}" data-slot="${escapeHtml(slotStr)}">Cancel</button>`
-                : `<span style="font-size:11px; color:var(--color-grey-light); align-self:center;">Cancelled</span>`
-            }
           </div>
         </td>
       </tr>
@@ -566,17 +634,6 @@ function wireActionButtons(container) {
   container.querySelectorAll('[data-act="details"]').forEach((btn) => {
     btn.addEventListener("click", () => openBookingDetailModal(btn.dataset.id));
   });
-
-  container.querySelectorAll('[data-act="cancel"]').forEach((btn) => {
-    btn.addEventListener("click", () =>
-      openCancelModal(
-        btn.dataset.id,
-        btn.dataset.facility,
-        btn.dataset.date,
-        btn.dataset.slot,
-      ),
-    );
-  });
 }
 
 // Open Booking Details Modal
@@ -592,8 +649,7 @@ function openBookingDetailModal(bookingID) {
       ? `${booking.requestBookingTimeIn} - ${booking.requestBookingsTimeOut}`
       : booking.slot || "—";
 
-  const isCancelled =
-    (booking.bookingStatus || "").toLowerCase() === "cancelled";
+  const meta = statusMeta(booking.bookingStatus);
 
   const overlay = openModal({
     title: `Reservation Details #${booking.bookingID || ""}`,
@@ -640,11 +696,26 @@ function openBookingDetailModal(bookingID) {
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
           <div>
             <small style="color:var(--color-grey); font-size:11px; text-transform:uppercase; font-weight:600;">Status</small>
-            <div style="margin-top:4px;"><span class="badge ${isCancelled ? "badge-danger" : "badge-success"}">${escapeHtml(booking.bookingStatus || "Confirmed")}</span></div>
+            <div style="margin-top:4px;"><span class="badge ${meta.badge}">${escapeHtml(meta.label)}</span></div>
           </div>
           <div>
             <small style="color:var(--color-grey); font-size:11px; text-transform:uppercase; font-weight:600;">Submitted On</small>
             <div style="font-size:13px; color:var(--color-grey); margin-top:4px;">${escapeHtml(booking.dateBooked || "—")} at ${escapeHtml(booking.timeBooked || "")}</div>
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+          <div>
+            <small style="color:var(--color-grey); font-size:11px; text-transform:uppercase; font-weight:600;">OR Number</small>
+            <div style="font-size:13px; margin-top:4px;">${escapeHtml(displayOrDash(booking.bookingORNumber))}</div>
+          </div>
+          <div>
+            <small style="color:var(--color-grey); font-size:11px; text-transform:uppercase; font-weight:600;">Amount</small>
+            <div style="font-size:13px; margin-top:4px;">${escapeHtml(displayOrDash(booking.bookingAmount))}</div>
+          </div>
+          <div>
+            <small style="color:var(--color-grey); font-size:11px; text-transform:uppercase; font-weight:600;">Updated By</small>
+            <div style="font-size:13px; margin-top:4px;">${escapeHtml(displayOrDash(booking.whoUpdatedTheBookingStatus))}</div>
           </div>
         </div>
 
@@ -660,15 +731,40 @@ function openBookingDetailModal(bookingID) {
         `
             : ""
         }
+
+        <div class="divider"></div>
+
+        <div>
+          <small style="color:var(--color-grey); font-size:11px; text-transform:uppercase; font-weight:600;">Update Status</small>
+          <div style="display:flex; gap:8px; margin-top:6px;">
+            <select id="statusUpdateSelect" class="form-select" style="flex:1;">
+              <option value="">Select action…</option>
+              <option value="approve">Approve</option>
+              <option value="deny">Deny</option>
+              <option value="cancel">Cancel</option>
+              <option value="refund">Refund</option>
+            </select>
+          </div>
+          <div id="approveFieldsWrap" style="display:none; margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label class="form-label" for="orNumberInput" style="font-weight:600; font-size:13px;">OR Number</label>
+              <input type="text" id="orNumberInput" class="form-input" placeholder="e.g. OR-00123">
+            </div>
+            <div>
+              <label class="form-label" for="amountInput" style="font-weight:600; font-size:13px;">Amount</label>
+              <input type="number" id="amountInput" class="form-input" placeholder="e.g. 500" min="0" step="0.01">
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" id="applyStatusUpdateBtn" style="margin-top:10px;">Apply Update</button>
+        </div>
       </div>
     `,
     footerHTML: `
       <button class="btn btn-secondary" data-act="close">Close</button>
-      ${
-        !isCancelled
-          ? `<button class="btn btn-danger" data-act="cancel-booking">Cancel Reservation</button>`
-          : ""
-      }
+      <button class="btn btn-secondary" data-act="print">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" stroke-linejoin="round"/></svg>
+        Print
+      </button>
     `,
   });
 
@@ -676,40 +772,145 @@ function openBookingDetailModal(bookingID) {
     .querySelector('[data-act="close"]')
     .addEventListener("click", () => overlay.close());
 
-  const cancelBtn = overlay.querySelector('[data-act="cancel-booking"]');
-  if (cancelBtn) {
-    cancelBtn.addEventListener("click", () => {
-      overlay.close();
-      openCancelModal(
-        booking.bookingID,
-        booking.bookerSport,
-        booking.requestBookingDate,
-        slotStr,
-      );
-    });
-  }
+  overlay.querySelector('[data-act="print"]').addEventListener("click", () => {
+    printSingleBooking(booking, slotStr);
+  });
+
+  // --- inline status update controls ---
+  const statusSelect = overlay.querySelector("#statusUpdateSelect");
+  const approveFieldsWrap = overlay.querySelector("#approveFieldsWrap");
+  const orNumberInput = overlay.querySelector("#orNumberInput");
+  const amountInput = overlay.querySelector("#amountInput");
+  const applyBtn = overlay.querySelector("#applyStatusUpdateBtn");
+
+  statusSelect.addEventListener("change", () => {
+    approveFieldsWrap.style.display =
+      statusSelect.value === "approve" ? "grid" : "none";
+  });
+
+  applyBtn.addEventListener("click", async () => {
+    const action = statusSelect.value;
+    if (!action) {
+      toast({ type: "warning", title: "Select an action first" });
+      return;
+    }
+
+    if (action === "approve") {
+      const orNumber = orNumberInput.value.trim();
+      const amount = amountInput.value.trim();
+      if (!orNumber || !amount) {
+        toast({
+          type: "warning",
+          title: "OR Number and Amount are required",
+        });
+        return;
+      }
+
+      try {
+        const who = getAdminDisplayName();
+        const updates = {
+          bookingStatus: "confirmed",
+          bookingORNumber: orNumber,
+          bookingAmount: amount,
+          whoUpdatedTheBookingStatus: who,
+        };
+        await update(
+          ref(db, `${DB_PATHS.bookings}/${booking.bookingID}`),
+          updates,
+        );
+
+        // Mirror OR Number/Amount/Updated-By onto the BookingSlots entry too.
+        if (booking.bookerSport && booking.requestBookingDate && slotStr) {
+          const slotPath = `${DB_PATHS.bookingSlots}/${booking.bookerSport}/${booking.requestBookingDate}/${slotStr}`;
+          await update(ref(db, slotPath), {
+            bookingORNumber: orNumber,
+            bookingAmount: amount,
+            whoUpdatedTheBookingStatus: who,
+          });
+        }
+
+        // Notify the booker, same pattern as deny/cancel/refund.
+        try {
+          const notifMessage = `Your facility reservation for ${booking.bookerSport || "the facility"} on ${booking.requestBookingDate || ""} has been approved.`;
+          await notifyBooker(booking, "", notifMessage, "confirmed");
+        } catch (notifErr) {
+          console.error("Failed to create notification:", notifErr);
+        }
+
+        toast({
+          type: "success",
+          title: "Reservation approved",
+          desc: `OR #${orNumber} recorded.`,
+        });
+        overlay.close();
+      } catch (err) {
+        toast({
+          type: "danger",
+          title: "Failed to approve reservation",
+          desc: err.message,
+        });
+      }
+      return;
+    }
+
+    // deny / cancel / refund — hand off to the shared reason modal.
+    overlay.close();
+    openStatusReasonModal(
+      booking.bookingID,
+      booking.bookerSport,
+      booking.requestBookingDate,
+      slotStr,
+      action,
+    );
+  });
 }
 
-// Open Cancellation Confirmation Modal
-function openCancelModal(bookingID, facility, dateStr, slotStr) {
+/** Prints a single reservation's full detail sheet, including OR Number,
+ * Amount, and who last updated the status. */
+function printSingleBooking(booking, slotStr) {
+  const bodyHTML = `
+    <table>
+      <tbody>
+        <tr><th style="text-align:left;">Booker Name</th><td>${escapeHtml(booking.bookerName || "—")}</td></tr>
+        <tr><th style="text-align:left;">Facility / Sport</th><td>${escapeHtml(booking.bookerSport || "—")}</td></tr>
+        <tr><th style="text-align:left;">Reserved Date</th><td>${escapeHtml(booking.requestBookingDate || "—")}</td></tr>
+        <tr><th style="text-align:left;">Time Slot</th><td>${escapeHtml(slotStr || "—")}</td></tr>
+        <tr><th style="text-align:left;">Purpose</th><td>${escapeHtml(booking.bookerPurpose || "—")}</td></tr>
+        <tr><th style="text-align:left;">Status</th><td>${escapeHtml(statusMeta(booking.bookingStatus).label)}</td></tr>
+        <tr><th style="text-align:left;">OR Number</th><td>${escapeHtml(displayOrDash(booking.bookingORNumber))}</td></tr>
+        <tr><th style="text-align:left;">Amount</th><td>${escapeHtml(displayOrDash(booking.bookingAmount))}</td></tr>
+        <tr><th style="text-align:left;">Updated By</th><td>${escapeHtml(displayOrDash(booking.whoUpdatedTheBookingStatus))}</td></tr>
+       
+        <tr><th style="text-align:left;">Date Booked</th><td>${escapeHtml(booking.dateBooked || "—")} ${escapeHtml(booking.timeBooked || "")}</td></tr>
+      </tbody>
+    </table>
+  `;
+  printHTML(`Reservation #${booking.bookingID || ""}`, bodyHTML);
+}
+
+// Open Status Reason Modal — shared by Deny / Cancel / Refund.
+function openStatusReasonModal(bookingID, facility, dateStr, slotStr, action) {
+  const cfg = STATUS_ACTIONS[action];
+  if (!cfg) return;
+
   const overlay = openModal({
-    title: "Cancel Facility Reservation",
+    title: cfg.title,
     subtitle: `${facility || ""} · ${dateStr || ""}`,
     bodyHTML: `
       <p style="margin-bottom:12px; font-size:14px; color:var(--color-black);">
-        Are you sure you want to cancel the reservation for <strong>${escapeHtml(facility || "Facility")}</strong> on <strong>${escapeHtml(dateStr || "")} (${escapeHtml(slotStr || "")})</strong>?
+        Are you sure you want to ${cfg.title.split(" ")[0].toLowerCase()} the reservation for <strong>${escapeHtml(facility || "Facility")}</strong> on <strong>${escapeHtml(dateStr || "")} (${escapeHtml(slotStr || "")})</strong>?
       </p>
       <div style="background:var(--color-warning-bg); border-left:4px solid var(--color-warning); padding:10px 14px; border-radius:var(--radius-sm); margin-bottom:16px; font-size:13px;">
-        This action will remove the slot from <code>BookingSlots</code> to allow other residents to book, and mark the booking record as <strong>cancelled</strong>.
+        ${cfg.banner}
       </div>
       <div>
-        <label class="form-label" for="cancelReasonInput" style="font-weight:600; font-size:13px;">Reason for Cancellation (Admin Remarks):</label>
-        <textarea id="cancelReasonInput" class="form-textarea" rows="3" placeholder="Enter reason for cancelling this reservation..." style="width:100%; box-sizing:border-box; margin-top:4px;"></textarea>
+        <label class="form-label" for="statusReasonInput" style="font-weight:600; font-size:13px;">Reason (Admin Remarks):</label>
+        <textarea id="statusReasonInput" class="form-textarea" rows="3" placeholder="Enter a reason…" style="width:100%; box-sizing:border-box; margin-top:4px;"></textarea>
       </div>
     `,
     footerHTML: `
-      <button class="btn btn-secondary" data-act="keep">Keep Reservation</button>
-      <button class="btn btn-danger" data-act="confirm-cancel">Confirm Cancellation</button>
+      <button class="btn btn-secondary" data-act="keep">Go Back</button>
+      <button class="btn btn-danger" data-act="confirm">${cfg.confirmLabel}</button>
     `,
   });
 
@@ -718,15 +919,15 @@ function openCancelModal(bookingID, facility, dateStr, slotStr) {
     .addEventListener("click", () => overlay.close());
 
   overlay
-    .querySelector('[data-act="confirm-cancel"]')
+    .querySelector('[data-act="confirm"]')
     .addEventListener("click", async () => {
-      const reasonInput = overlay.querySelector("#cancelReasonInput");
+      const reasonInput = overlay.querySelector("#statusReasonInput");
       const reason = reasonInput
-        ? reasonInput.value.trim() || "Cancelled by HOA Admin"
-        : "Cancelled by HOA Admin";
+        ? reasonInput.value.trim() || cfg.defaultReason
+        : cfg.defaultReason;
 
       try {
-        // 1. Delete from BookingSlots node: BookingSlots > [facility] > [dateStr] > [slotStr]
+        // 1. Free the slot: BookingSlots > [facility] > [dateStr] > [slotStr]
         if (facility && dateStr && slotStr) {
           const slotPath = `${DB_PATHS.bookingSlots}/${facility}/${dateStr}/${slotStr}`;
           await remove(ref(db, slotPath));
@@ -736,10 +937,12 @@ function openCancelModal(bookingID, facility, dateStr, slotStr) {
         if (bookingID) {
           const nowFormatted = formatDateTime(new Date());
           const bookingPath = `${DB_PATHS.bookings}/${bookingID}`;
+          const who = getAdminDisplayName();
           await update(ref(db, bookingPath), {
-            bookingStatus: "cancelled",
+            bookingStatus: cfg.status,
             cancelledDate: nowFormatted,
             adminRemarks: reason,
+            whoUpdatedTheBookingStatus: who,
           });
 
           // 3. Notify the booker, same as the Android app — only when we can
@@ -747,7 +950,12 @@ function openCancelModal(bookingID, facility, dateStr, slotStr) {
           const booking = dataBookings.find((b) => b.bookingID === bookingID);
           if (booking) {
             try {
-              await notifyBooker(booking, reason);
+              await notifyBooker(
+                booking,
+                reason,
+                cfg.notifMessage(booking),
+                cfg.status,
+              );
             } catch (notifErr) {
               console.error("Failed to create notification:", notifErr);
             }
@@ -757,13 +965,13 @@ function openCancelModal(bookingID, facility, dateStr, slotStr) {
         overlay.close();
         toast({
           type: "success",
-          title: "Reservation cancelled and slot released!",
+          title: `Reservation ${cfg.status} and slot released!`,
         });
       } catch (err) {
-        console.error("Cancellation error:", err);
+        console.error(`${action} error:`, err);
         toast({
           type: "danger",
-          title: "Failed to cancel reservation: " + err.message,
+          title: `Failed to ${action} reservation: ` + err.message,
         });
       }
     });
@@ -786,17 +994,17 @@ function openPrintRangeModal() {
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
           <div>
             <label class="form-label" for="printStartDate" style="font-weight:600; font-size:13px;">Start Date</label>
-            <input type="date" id="printStartDate" class="form-input" value="${defaultStart}">
+            <input type="date" id="printStartDate" class="form-input" value="${defaultStart}" style="border-radius:8px; padding:8px 12px; box-sizing:border-box; width:100%;">
           </div>
           <div>
             <label class="form-label" for="printEndDate" style="font-weight:600; font-size:13px;">End Date</label>
-            <input type="date" id="printEndDate" class="form-input" value="${defaultEnd}">
+            <input type="date" id="printEndDate" class="form-input" value="${defaultEnd}" style="border-radius:8px; padding:8px 12px; box-sizing:border-box; width:100%;">
           </div>
         </div>
 
         <div>
           <label class="form-label" for="printFacility" style="font-weight:600; font-size:13px;">Facility / Sport</label>
-          <select id="printFacility" class="form-select">
+          <select id="printFacility" class="form-select" style="border-radius:8px; padding:8px 12px; box-sizing:border-box; width:100%;">
             <option value="all">All Facilities</option>
             ${SPORTS_CATEGORIES.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("")}
           </select>
@@ -847,6 +1055,9 @@ function openPrintRangeModal() {
             <th>Time Slot</th>
             <th>Purpose</th>
             <th>Status</th>
+            <th>OR Number</th>
+            <th>Amount</th>
+            <th>Updated By</th>
             <th>Date Booked</th>
           </tr>
         </thead>
@@ -854,7 +1065,7 @@ function openPrintRangeModal() {
     `;
 
     if (!filtered.length) {
-      bodyHTML += `<tr><td colspan="8" style="text-align:center; padding:20px;">No bookings found matching selected parameters.</td></tr>`;
+      bodyHTML += `<tr><td colspan="10" style="text-align:center; padding:20px;">No bookings found matching selected parameters.</td></tr>`;
     } else {
       filtered.forEach((b) => {
         const slotStr =
@@ -864,13 +1075,15 @@ function openPrintRangeModal() {
 
         bodyHTML += `
           <tr>
-          
             <td><strong>${escapeHtml(b.bookerName || "—")}</strong></td>
             <td>${escapeHtml(b.bookerSport || "—")}</td>
             <td>${escapeHtml(b.requestBookingDate || "—")}</td>
             <td>${escapeHtml(slotStr)}</td>
             <td>${escapeHtml(b.bookerPurpose || "—")}</td>
-            <td>${escapeHtml(b.bookingStatus || "Confirmed")}</td>
+            <td>${escapeHtml(statusMeta(b.bookingStatus).label)}</td>
+            <td>${escapeHtml(displayOrDash(b.bookingORNumber))}</td>
+            <td>${escapeHtml(displayOrDash(b.bookingAmount))}</td>
+            <td>${escapeHtml(displayOrDash(b.whoUpdatedTheBookingStatus))}</td>
             <td>${escapeHtml(b.dateBooked || "—")} ${escapeHtml(b.timeBooked || "")}</td>
           </tr>
         `;
