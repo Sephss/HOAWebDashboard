@@ -474,18 +474,28 @@ function renderSlotGrid(container, bookingsList) {
     ALL_SLOTS.forEach((slotTime) => {
       const slotRecord = facilitySlots[slotTime];
 
-      const matchingBooking = dataBookings.find((b) => {
-        const slotStr =
-          b.requestBookingTimeIn && b.requestBookingsTimeOut
-            ? `${b.requestBookingTimeIn} - ${b.requestBookingsTimeOut}`
-            : b.slot || "";
+      // BookingSlots holds the bookingID of whichever booking currently
+      // occupies this slot — that's the authoritative match. Falling back
+      // to a facility/date/slot-text search only when there's no slot
+      // record avoids grabbing an old denied/cancelled/refunded booking
+      // that still sits in dataBookings for this same slot combination
+      // (those records are never deleted, only unlinked from BookingSlots).
+      const matchingBooking = slotRecord?.bookingID
+        ? dataBookings.find((b) => b.bookingID === slotRecord.bookingID)
+        : dataBookings.find((b) => {
+            const slotStr =
+              b.requestBookingTimeIn && b.requestBookingsTimeOut
+                ? `${b.requestBookingTimeIn} - ${b.requestBookingsTimeOut}`
+                : b.slot || "";
 
-        return (
-          b.bookerSport === facility &&
-          (filterByDate ? b.requestBookingDate === selectedDateStr : true) &&
-          slotStr === slotTime
-        );
-      });
+            return (
+              b.bookerSport === facility &&
+              (filterByDate
+                ? b.requestBookingDate === selectedDateStr
+                : true) &&
+              slotStr === slotTime
+            );
+          });
 
       const isTaken = !!slotRecord;
 
@@ -704,7 +714,7 @@ function openBookingDetailModal(bookingID) {
           </div>
         </div>
 
-        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px;">
           <div>
             <small style="color:var(--color-grey); font-size:11px; text-transform:uppercase; font-weight:600;">OR Number</small>
             <div style="font-size:13px; margin-top:4px;">${escapeHtml(displayOrDash(booking.bookingORNumber))}</div>
@@ -712,6 +722,10 @@ function openBookingDetailModal(bookingID) {
           <div>
             <small style="color:var(--color-grey); font-size:11px; text-transform:uppercase; font-weight:600;">Amount</small>
             <div style="font-size:13px; margin-top:4px;">${escapeHtml(displayOrDash(booking.bookingAmount))}</div>
+          </div>
+          <div>
+            <small style="color:var(--color-grey); font-size:11px; text-transform:uppercase; font-weight:600;">Payment Received By</small>
+            <div style="font-size:13px; margin-top:4px;">${escapeHtml(displayOrDash(booking.paymentReceivedBy))}</div>
           </div>
           <div>
             <small style="color:var(--color-grey); font-size:11px; text-transform:uppercase; font-weight:600;">Updated By</small>
@@ -737,7 +751,7 @@ function openBookingDetailModal(bookingID) {
         <div>
           <small style="color:var(--color-grey); font-size:11px; text-transform:uppercase; font-weight:600;">Update Status</small>
           <div style="display:flex; gap:8px; margin-top:6px;">
-            <select id="statusUpdateSelect" class="form-select" style="flex:1;">
+            <select id="statusUpdateSelect" class="form-select" style="flex:1; border-radius:8px; padding:8px 12px; box-sizing:border-box;">
               <option value="">Select action…</option>
               <option value="approve">Approve</option>
               <option value="deny">Deny</option>
@@ -745,14 +759,18 @@ function openBookingDetailModal(bookingID) {
               <option value="refund">Refund</option>
             </select>
           </div>
-          <div id="approveFieldsWrap" style="display:none; margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div id="approveFieldsWrap" style="display:none; margin-top:10px; display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
             <div>
               <label class="form-label" for="orNumberInput" style="font-weight:600; font-size:13px;">OR Number</label>
-              <input type="text" id="orNumberInput" class="form-input" placeholder="e.g. OR-00123">
+              <input type="text" id="orNumberInput" class="form-input" placeholder="e.g. OR-00123" style="border-radius:8px; padding:8px 12px; box-sizing:border-box; width:100%;">
             </div>
             <div>
               <label class="form-label" for="amountInput" style="font-weight:600; font-size:13px;">Amount</label>
-              <input type="number" id="amountInput" class="form-input" placeholder="e.g. 500" min="0" step="0.01">
+              <input type="number" id="amountInput" class="form-input" placeholder="e.g. 500" min="0" step="0.01" style="border-radius:8px; padding:8px 12px; box-sizing:border-box; width:100%;">
+            </div>
+            <div>
+              <label class="form-label" for="paymentReceivedByInput" style="font-weight:600; font-size:13px;">Payment Received By</label>
+              <input type="text" id="paymentReceivedByInput" class="form-input" placeholder="e.g. Juan Dela Cruz" style="border-radius:8px; padding:8px 12px; box-sizing:border-box; width:100%;">
             </div>
           </div>
           <button class="btn btn-primary btn-sm" id="applyStatusUpdateBtn" style="margin-top:10px;">Apply Update</button>
@@ -781,6 +799,9 @@ function openBookingDetailModal(bookingID) {
   const approveFieldsWrap = overlay.querySelector("#approveFieldsWrap");
   const orNumberInput = overlay.querySelector("#orNumberInput");
   const amountInput = overlay.querySelector("#amountInput");
+  const paymentReceivedByInput = overlay.querySelector(
+    "#paymentReceivedByInput",
+  );
   const applyBtn = overlay.querySelector("#applyStatusUpdateBtn");
 
   statusSelect.addEventListener("change", () => {
@@ -798,10 +819,11 @@ function openBookingDetailModal(bookingID) {
     if (action === "approve") {
       const orNumber = orNumberInput.value.trim();
       const amount = amountInput.value.trim();
-      if (!orNumber || !amount) {
+      const paymentReceivedBy = paymentReceivedByInput.value.trim();
+      if (!orNumber || !amount || !paymentReceivedBy) {
         toast({
           type: "warning",
-          title: "OR Number and Amount are required",
+          title: "OR Number, Amount, and Payment Received By are required",
         });
         return;
       }
@@ -812,6 +834,7 @@ function openBookingDetailModal(bookingID) {
           bookingStatus: "confirmed",
           bookingORNumber: orNumber,
           bookingAmount: amount,
+          paymentReceivedBy,
           whoUpdatedTheBookingStatus: who,
         };
         await update(
@@ -819,12 +842,13 @@ function openBookingDetailModal(bookingID) {
           updates,
         );
 
-        // Mirror OR Number/Amount/Updated-By onto the BookingSlots entry too.
+        // Mirror OR Number/Amount/Payment Received By/Updated-By onto the BookingSlots entry too.
         if (booking.bookerSport && booking.requestBookingDate && slotStr) {
           const slotPath = `${DB_PATHS.bookingSlots}/${booking.bookerSport}/${booking.requestBookingDate}/${slotStr}`;
           await update(ref(db, slotPath), {
             bookingORNumber: orNumber,
             bookingAmount: amount,
+            paymentReceivedBy,
             whoUpdatedTheBookingStatus: who,
           });
         }
@@ -879,13 +903,14 @@ function printSingleBooking(booking, slotStr) {
         <tr><th style="text-align:left;">Status</th><td>${escapeHtml(statusMeta(booking.bookingStatus).label)}</td></tr>
         <tr><th style="text-align:left;">OR Number</th><td>${escapeHtml(displayOrDash(booking.bookingORNumber))}</td></tr>
         <tr><th style="text-align:left;">Amount</th><td>${escapeHtml(displayOrDash(booking.bookingAmount))}</td></tr>
+        <tr><th style="text-align:left;">Payment Received By</th><td>${escapeHtml(displayOrDash(booking.paymentReceivedBy))}</td></tr>
         <tr><th style="text-align:left;">Updated By</th><td>${escapeHtml(displayOrDash(booking.whoUpdatedTheBookingStatus))}</td></tr>
-       
+      
         <tr><th style="text-align:left;">Date Booked</th><td>${escapeHtml(booking.dateBooked || "—")} ${escapeHtml(booking.timeBooked || "")}</td></tr>
       </tbody>
     </table>
   `;
-  printHTML(`Reservation Details`, bodyHTML);
+  printHTML(`Reservation details`, bodyHTML);
 }
 
 // Open Status Reason Modal — shared by Deny / Cancel / Refund.
@@ -1057,6 +1082,7 @@ function openPrintRangeModal() {
             <th>Status</th>
             <th>OR Number</th>
             <th>Amount</th>
+            <th>Payment Received By</th>
             <th>Updated By</th>
             <th>Date Booked</th>
           </tr>
@@ -1065,7 +1091,7 @@ function openPrintRangeModal() {
     `;
 
     if (!filtered.length) {
-      bodyHTML += `<tr><td colspan="10" style="text-align:center; padding:20px;">No bookings found matching selected parameters.</td></tr>`;
+      bodyHTML += `<tr><td colspan="11" style="text-align:center; padding:20px;">No bookings found matching selected parameters.</td></tr>`;
     } else {
       filtered.forEach((b) => {
         const slotStr =
@@ -1083,6 +1109,7 @@ function openPrintRangeModal() {
             <td>${escapeHtml(statusMeta(b.bookingStatus).label)}</td>
             <td>${escapeHtml(displayOrDash(b.bookingORNumber))}</td>
             <td>${escapeHtml(displayOrDash(b.bookingAmount))}</td>
+            <td>${escapeHtml(displayOrDash(b.paymentReceivedBy))}</td>
             <td>${escapeHtml(displayOrDash(b.whoUpdatedTheBookingStatus))}</td>
             <td>${escapeHtml(b.dateBooked || "—")} ${escapeHtml(b.timeBooked || "")}</td>
           </tr>
