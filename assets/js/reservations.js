@@ -937,7 +937,7 @@ function printSingleBooking(booking, slotStr) {
         <tr><th style="text-align:left;">Amount</th><td>${escapeHtml(displayOrDash(booking.bookingAmount))}</td></tr>
         <tr><th style="text-align:left;">Payment Received By</th><td>${escapeHtml(displayOrDash(booking.paymentReceivedBy))}</td></tr>
         <tr><th style="text-align:left;">Updated By</th><td>${escapeHtml(displayOrDash(booking.whoUpdatedTheBookingStatus))}</td></tr>
-        <tr><th style="text-align:left;">Admin Remarks</th><td>${escapeHtml(booking.adminRemarks || "—")}</td></tr>
+        
         <tr><th style="text-align:left;">Date Booked</th><td>${escapeHtml(booking.dateBooked || "—")} ${escapeHtml(booking.timeBooked || "")}</td></tr>
       </tbody>
     </table>
