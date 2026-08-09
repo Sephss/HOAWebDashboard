@@ -21,6 +21,7 @@ import {
   update,
   push,
   set,
+  get,
   DB_PATHS,
 } from "./firebase.js";
 import {
@@ -32,6 +33,7 @@ import {
   statusToken,
 } from "./utils.js";
 import { toast, openModal } from "./ui.js";
+import { uploadImage } from "./imageUpload.js";
 
 const adminProfile = await guardPage();
 renderShell("reservations", adminProfile, {
@@ -165,6 +167,10 @@ content.innerHTML = `
       <div class="page-header__subtitle">View, track, manage, and print facility reservations across your community.</div>
     </div>
     <div class="page-header__actions">
+      <button class="btn btn-primary" id="createReservationBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>
+        Create Reservation
+      </button>
       <button class="btn btn-secondary" id="printReportBtn">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" stroke-linejoin="round"/></svg>
         Print Report
@@ -358,6 +364,12 @@ document.getElementById("refreshBtn").addEventListener("click", () => {
 document.getElementById("printReportBtn").addEventListener("click", () => {
   openPrintRangeModal();
 });
+
+document
+  .getElementById("createReservationBtn")
+  .addEventListener("click", () => {
+    openCreateReservationModal();
+  });
 
 // Bind Firebase RTDB Listeners
 function bindFirebase() {
@@ -905,12 +917,12 @@ function printSingleBooking(booking, slotStr) {
         <tr><th style="text-align:left;">Amount</th><td>${escapeHtml(displayOrDash(booking.bookingAmount))}</td></tr>
         <tr><th style="text-align:left;">Payment Received By</th><td>${escapeHtml(displayOrDash(booking.paymentReceivedBy))}</td></tr>
         <tr><th style="text-align:left;">Updated By</th><td>${escapeHtml(displayOrDash(booking.whoUpdatedTheBookingStatus))}</td></tr>
-      
+        <tr><th style="text-align:left;">Admin Remarks</th><td>${escapeHtml(booking.adminRemarks || "—")}</td></tr>
         <tr><th style="text-align:left;">Date Booked</th><td>${escapeHtml(booking.dateBooked || "—")} ${escapeHtml(booking.timeBooked || "")}</td></tr>
       </tbody>
     </table>
   `;
-  printHTML(`Reservation details`, bodyHTML);
+  printHTML(`Reservation #${booking.bookingID || ""}`, bodyHTML);
 }
 
 // Open Status Reason Modal — shared by Deny / Cancel / Refund.
@@ -1122,4 +1134,325 @@ function openPrintRangeModal() {
     overlay.close();
     printHTML(reportTitle, bodyHTML);
   });
+}
+
+/* ============================================================
+   CREATE RESERVATION — Admin-initiated booking, created already
+   "confirmed" (payment already recorded), mirroring the same
+   two-step Android flow: reserve the slot first, then write the
+   Bookings record with the same bookingID.
+   ============================================================ */
+function openCreateReservationModal() {
+  let selectedCreateDate = ""; // "MMMM dd, yyyy"
+  let selectedCreateSlot = "";
+  let selectedReceiptFile = null;
+
+  const overlay = openModal({
+    title: "Create Reservation",
+    subtitle:
+      "Manually create a confirmed facility reservation on behalf of a resident",
+    size: "modal-lg",
+    bodyHTML: `
+      <div class="field" id="createSportField">
+        <label>Sport / Facility</label>
+        <select class="form-select" id="createSportSelect" style="border-radius:8px; padding:8px 12px; box-sizing:border-box; width:100%;">
+          <option value="">Select Sport</option>
+          ${SPORTS_CATEGORIES.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("")}
+        </select>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px;">
+        <div class="field" id="createBookerNameField">
+          <label>Booker Name</label>
+          <input type="text" class="form-input" id="createBookerNameInput" placeholder="e.g. Juan Dela Cruz" style="border-radius:8px; padding:8px 12px; box-sizing:border-box; width:100%;">
+        </div>
+        <div class="field" id="createDateField">
+          <label>Date to Book</label>
+          <input type="date" class="form-input" id="createDateInput" style="border-radius:8px; padding:8px 12px; box-sizing:border-box; width:100%;">
+        </div>
+      </div>
+      <div class="field" id="createPurposeField">
+        <label>Purpose</label>
+        <input type="text" class="form-input" id="createPurposeInput" placeholder="Purpose of the reservation" style="border-radius:8px; padding:8px 12px; box-sizing:border-box; width:100%;">
+      </div>
+      <div class="field">
+        <label>Remarks (optional)</label>
+        <textarea class="form-textarea" id="createRemarksInput" rows="2" style="width:100%; box-sizing:border-box; border-radius:8px; padding:8px 12px;"></textarea>
+      </div>
+      <div class="field" id="createSlotsField">
+        <label>Available Time Slots</label>
+        <div id="createSlotsContainer" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:4px;">
+          <span style="font-size:12px; color:var(--color-grey);">Select a sport and date to see available slots.</span>
+        </div>
+      </div>
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px;">
+        <div class="field" id="createOrField">
+          <label>OR Number</label>
+          <input type="text" class="form-input" id="createOrNumberInput" placeholder="e.g. OR-00123" style="border-radius:8px; padding:8px 12px; box-sizing:border-box; width:100%;">
+        </div>
+        <div class="field" id="createAmountField">
+          <label>Amount</label>
+          <input type="number" class="form-input" id="createAmountInput" placeholder="e.g. 500" min="0" step="0.01" style="border-radius:8px; padding:8px 12px; box-sizing:border-box; width:100%;">
+        </div>
+        <div class="field" id="createPaymentByField">
+          <label>Payment Received By</label>
+          <input type="text" class="form-input" id="createPaymentByInput" placeholder="e.g. Maria Santos" style="border-radius:8px; padding:8px 12px; box-sizing:border-box; width:100%;">
+        </div>
+      </div>
+      <div class="field">
+        <label>Receipt Image (optional)</label>
+        <input type="file" accept="image/*" class="form-input" id="createReceiptInput">
+        <div id="createReceiptPreviewWrap" style="margin-top:10px; display:none;">
+          <img id="createReceiptPreview" src="" alt="Receipt preview" style="max-width:100%; max-height:180px; border-radius:8px; display:block;">
+          <button type="button" class="btn btn-secondary btn-sm" id="createReceiptRemoveBtn" style="margin-top:8px;">Remove image</button>
+        </div>
+      </div>
+    `,
+    footerHTML: `
+      <button class="btn btn-secondary" data-act="cancel">Cancel</button>
+      <button class="btn btn-primary" data-act="submit">Create Reservation</button>
+    `,
+  });
+
+  overlay
+    .querySelector('[data-act="cancel"]')
+    .addEventListener("click", () => overlay.close());
+
+  const sportSelect = overlay.querySelector("#createSportSelect");
+  const dateInputEl = overlay.querySelector("#createDateInput");
+  const slotsContainer = overlay.querySelector("#createSlotsContainer");
+
+  async function refreshCreateSlots() {
+    selectedCreateSlot = "";
+    const sport = sportSelect.value;
+    const dateVal = dateInputEl.value;
+
+    if (!sport || !dateVal) {
+      slotsContainer.innerHTML = `<span style="font-size:12px; color:var(--color-grey);">Select a sport and date to see available slots.</span>`;
+      return;
+    }
+
+    const parts = dateVal.split("-");
+    selectedCreateDate = formatBookingDateStr(
+      new Date(parts[0], parts[1] - 1, parts[2]),
+    );
+
+    slotsContainer.innerHTML = `<span style="font-size:12px; color:var(--color-grey);">Loading slots…</span>`;
+
+    try {
+      const snap = await get(
+        ref(db, `${DB_PATHS.bookingSlots}/${sport}/${selectedCreateDate}`),
+      );
+      const taken = snap.exists() ? Object.keys(snap.val()) : [];
+      slotsContainer.innerHTML = "";
+
+      ALL_SLOTS.forEach((slotTime) => {
+        const isTaken = taken.includes(slotTime);
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.textContent = slotTime;
+        chip.style.cssText = `padding:8px 12px; border-radius:8px; font-size:12px; border:1px solid var(--color-border-strong); background:var(--color-surface); cursor:${isTaken ? "not-allowed" : "pointer"}; opacity:${isTaken ? "0.4" : "1"};`;
+
+        if (isTaken) {
+          chip.disabled = true;
+        } else {
+          chip.addEventListener("click", () => {
+            selectedCreateSlot = slotTime;
+            Array.from(slotsContainer.children).forEach((c) => {
+              c.style.background = "var(--color-surface)";
+              c.style.color = "";
+              c.style.borderColor = "var(--color-border-strong)";
+            });
+            chip.style.background = "var(--color-primary)";
+            chip.style.color = "#fff";
+            chip.style.borderColor = "var(--color-primary)";
+          });
+        }
+
+        slotsContainer.appendChild(chip);
+      });
+    } catch (err) {
+      slotsContainer.innerHTML = `<span style="font-size:12px; color:var(--color-danger);">Failed to load slots: ${escapeHtml(err.message)}</span>`;
+    }
+  }
+
+  sportSelect.addEventListener("change", refreshCreateSlots);
+  dateInputEl.addEventListener("change", refreshCreateSlots);
+
+  // --- receipt image handling ---
+  const receiptInput = overlay.querySelector("#createReceiptInput");
+  const receiptPreviewWrap = overlay.querySelector("#createReceiptPreviewWrap");
+  const receiptPreview = overlay.querySelector("#createReceiptPreview");
+  const receiptRemoveBtn = overlay.querySelector("#createReceiptRemoveBtn");
+
+  receiptInput.addEventListener("change", () => {
+    const file = receiptInput.files[0];
+    if (!file) return;
+    selectedReceiptFile = file;
+    const reader = new FileReader();
+    reader.onload = () => {
+      receiptPreview.src = reader.result;
+      receiptPreviewWrap.style.display = "";
+    };
+    reader.readAsDataURL(file);
+  });
+
+  receiptRemoveBtn.addEventListener("click", () => {
+    selectedReceiptFile = null;
+    receiptInput.value = "";
+    receiptPreview.src = "";
+    receiptPreviewWrap.style.display = "none";
+  });
+
+  overlay
+    .querySelector('[data-act="submit"]')
+    .addEventListener("click", async () => {
+      const sport = sportSelect.value;
+      const bookerName = overlay
+        .querySelector("#createBookerNameInput")
+        .value.trim();
+      const purpose = overlay.querySelector("#createPurposeInput").value.trim();
+      const remarks = overlay.querySelector("#createRemarksInput").value.trim();
+      const orNumber = overlay
+        .querySelector("#createOrNumberInput")
+        .value.trim();
+      const amount = overlay.querySelector("#createAmountInput").value.trim();
+      const paymentReceivedBy = overlay
+        .querySelector("#createPaymentByInput")
+        .value.trim();
+      const dateVal = dateInputEl.value;
+
+      if (!sport) {
+        toast({ type: "warning", title: "Select a sport / facility" });
+        return;
+      }
+      if (!dateVal) {
+        toast({ type: "warning", title: "Select a date" });
+        return;
+      }
+      if (!selectedCreateSlot) {
+        toast({ type: "warning", title: "Select an available time slot" });
+        return;
+      }
+      if (!bookerName) {
+        toast({ type: "warning", title: "Enter the booker's name" });
+        return;
+      }
+      if (!purpose) {
+        toast({ type: "warning", title: "Enter a purpose" });
+        return;
+      }
+      if (!orNumber || !amount || !paymentReceivedBy) {
+        toast({
+          type: "warning",
+          title: "OR Number, Amount, and Payment Received By are required",
+        });
+        return;
+      }
+
+      const submitBtn = overlay.querySelector('[data-act="submit"]');
+      const originalLabel = submitBtn.textContent;
+      submitBtn.disabled = true;
+
+      try {
+        let receiptImageUrl = "";
+        if (selectedReceiptFile) {
+          submitBtn.textContent = "Uploading receipt…";
+          receiptImageUrl = await uploadImage(selectedReceiptFile);
+        }
+
+        submitBtn.textContent = "Creating…";
+
+        const [timeIn, timeOut] = selectedCreateSlot.split(" - ");
+        const who = getAdminDisplayName();
+        const now = new Date();
+        const dateBooked = formatManilaDate(now);
+        const timeBooked = formatManilaTime(now);
+        const timestamp = String(now.getTime());
+
+        // Generate the shared bookingID upfront, same as the Android flow.
+        const bookingRef = push(ref(db, DB_PATHS.bookings));
+        const bookingID = bookingRef.key;
+
+        const slotPath = `${DB_PATHS.bookingSlots}/${sport}/${selectedCreateDate}/${selectedCreateSlot}`;
+
+        // Step 1: reserve the slot first — fail fast if someone already took it.
+        const existingSlotSnap = await get(ref(db, slotPath));
+        if (existingSlotSnap.exists()) {
+          toast({
+            type: "warning",
+            title: "That slot was just taken",
+            desc: "Please pick a different time slot.",
+          });
+          submitBtn.disabled = false;
+          submitBtn.textContent = originalLabel;
+          refreshCreateSlots();
+          return;
+        }
+
+        const slotData = {
+          bookingID,
+          bookerName,
+          bookerSport: sport,
+          slotDate: selectedCreateDate,
+          slot: selectedCreateSlot,
+          timeIn,
+          timeOut,
+          bookingStatus: "confirmed",
+          bookingORNumber: orNumber,
+          bookingAmount: amount,
+          whoUpdatedTheBookingStatus: who,
+          paymentReceivedBy,
+        };
+        await set(ref(db, slotPath), slotData);
+
+        // Step 2: slot is secured, now create the Bookings record with the same ID.
+        const bookingData = {
+          bookingID,
+          bookerID: "none",
+          bookingStatus: "confirmed",
+          bookerPurpose: purpose,
+          bookerRemarks: remarks,
+          bookerName,
+          bookerSport: sport,
+          dateBooked,
+          timeBooked,
+          requestBookingDate: selectedCreateDate,
+          requestBookingTimeIn: timeIn,
+          requestBookingsTimeOut: timeOut,
+          timestamp,
+          adminRemarks: "",
+          approvedDate: "",
+          rejectedDate: "",
+          cancelledDate: "",
+          bookingORNumber: orNumber,
+          bookingAmount: amount,
+          whoUpdatedTheBookingStatus: who,
+          paymentReceivedBy,
+          receiptImageUrl,
+        };
+
+        try {
+          await set(ref(db, `${DB_PATHS.bookings}/${bookingID}`), bookingData);
+          toast({
+            type: "success",
+            title: "Reservation created",
+            desc: `${bookerName} — ${sport} on ${selectedCreateDate}.`,
+          });
+          overlay.close();
+        } catch (bookingErr) {
+          // Roll back the slot reservation, matching the Android app's
+          // rollback-on-failure behavior in CreateBookingPage.
+          await remove(ref(db, slotPath));
+          throw bookingErr;
+        }
+      } catch (err) {
+        toast({
+          type: "danger",
+          title: "Failed to create reservation",
+          desc: err.message,
+        });
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalLabel;
+      }
+    });
 }
