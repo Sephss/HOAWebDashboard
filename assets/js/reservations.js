@@ -249,18 +249,25 @@ function formatDateForInput(dateObj) {
 function statusMeta(status) {
   const token = (status || "confirmed").toLowerCase();
   const map = {
-    pending: { label: "Pending", badge: "badge-pending" },
-    confirmed: { label: "Confirmed", badge: "badge-success" },
-    cancelled: { label: "Cancelled", badge: "badge-danger" },
-    denied: { label: "Denied", badge: "badge-danger" },
-    refunded: { label: "Refunded", badge: "badge-neutral" },
+    pending: { label: "Pending", bg: "#FFEDD5", color: "#C2410C" }, // orange
+    confirmed: { label: "Confirmed", bg: "#DBEAFE", color: "#1D4ED8" }, // blue
+    denied: { label: "Denied", bg: "#FEE2E2", color: "#DC2626" }, // red (lightest shade)
+    cancelled: { label: "Cancelled", bg: "#FECACA", color: "#B91C1C" }, // red (mid shade)
+    refunded: { label: "Refunded", bg: "#FCA5A5", color: "#7F1D1D" }, // red (darkest shade)
   };
   return (
     map[token] || {
       label: status ? status[0].toUpperCase() + status.slice(1) : "Unknown",
-      badge: "badge-neutral",
+      bg: "#E5E7EB",
+      color: "#374151",
     }
   );
+}
+
+/** Renders a status badge span using statusMeta's explicit colors. */
+function statusBadgeHTML(status, extraStyle = "") {
+  const meta = statusMeta(status);
+  return `<span class="badge" style="background:${meta.bg}; color:${meta.color}; ${extraStyle}">${escapeHtml(meta.label)}</span>`;
 }
 
 // Application State
@@ -522,7 +529,7 @@ function renderSlotGrid(container, bookingsList) {
         html += `
           <div style="border:1.5px solid var(--color-primary-100); background:var(--color-primary-50); border-radius:var(--radius-md); padding:14px;">
             <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-              <span class="badge ${meta.badge}" style="font-size:11px;">${escapeHtml(meta.label)}</span>
+              <span class="badge" style="background:${meta.bg}; color:${meta.color}; font-size:11px;">${escapeHtml(meta.label)}</span>
               <small style="color:var(--color-grey); font-family:var(--font-mono); font-size:11px;">${escapeHtml(slotTime)}</small>
             </div>
             <div style="font-weight:600; color:var(--color-black); font-size:14px; margin-bottom:4px;">
@@ -626,7 +633,7 @@ function renderTableView(container, bookingsList) {
           </div>
         </td>
         <td>
-          <span class="badge ${meta.badge}">${escapeHtml(meta.label)}</span>
+          <span class="badge" style="background:${meta.bg}; color:${meta.color};">${escapeHtml(meta.label)}</span>
         </td>
         <td>
           <small style="color:var(--color-grey);">${escapeHtml(b.dateBooked || "—")} ${escapeHtml(b.timeBooked || "")}</small>
@@ -718,7 +725,7 @@ function openBookingDetailModal(bookingID) {
         <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
           <div>
             <small style="color:var(--color-grey); font-size:11px; text-transform:uppercase; font-weight:600;">Status</small>
-            <div style="margin-top:4px;"><span class="badge ${meta.badge}">${escapeHtml(meta.label)}</span></div>
+            <div style="margin-top:4px;"><span class="badge" style="background:${meta.bg}; color:${meta.color};">${escapeHtml(meta.label)}</span></div>
           </div>
           <div>
             <small style="color:var(--color-grey); font-size:11px; text-transform:uppercase; font-weight:600;">Submitted On</small>
@@ -744,6 +751,19 @@ function openBookingDetailModal(bookingID) {
             <div style="font-size:13px; margin-top:4px;">${escapeHtml(displayOrDash(booking.whoUpdatedTheBookingStatus))}</div>
           </div>
         </div>
+
+        ${
+          booking.receiptImageUrl
+            ? `
+          <div>
+            <small style="color:var(--color-grey); font-size:11px; text-transform:uppercase; font-weight:600;">Receipt Image</small>
+            <a href="${escapeHtml(booking.receiptImageUrl)}" target="_blank" rel="noopener" style="display:block; margin-top:4px;">
+              <img src="${escapeHtml(booking.receiptImageUrl)}" alt="Payment receipt" style="max-width:100%; max-height:220px; border-radius:var(--radius-md); display:block; border:1px solid var(--color-border);">
+            </a>
+          </div>
+        `
+            : ""
+        }
 
         ${
           booking.adminRemarks
@@ -921,6 +941,11 @@ function printSingleBooking(booking, slotStr) {
         <tr><th style="text-align:left;">Date Booked</th><td>${escapeHtml(booking.dateBooked || "—")} ${escapeHtml(booking.timeBooked || "")}</td></tr>
       </tbody>
     </table>
+    ${
+      booking.receiptImageUrl
+        ? `<div style="margin-top:16px;"><strong>Receipt Image:</strong><br><img src="${escapeHtml(booking.receiptImageUrl)}" alt="Payment receipt" style="max-width:320px; margin-top:8px; border:1px solid #ccc;"></div>`
+        : ""
+    }
   `;
   printHTML(`Reservation #${booking.bookingID || ""}`, bodyHTML);
 }
