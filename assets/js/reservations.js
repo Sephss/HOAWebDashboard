@@ -681,7 +681,7 @@ function openBookingDetailModal(bookingID) {
   const meta = statusMeta(booking.bookingStatus);
 
   const overlay = openModal({
-    title: `Reservation Details #${booking.bookingID || ""}`,
+    title: `Reservation Details`,
     subtitle: booking.bookerSport || "Facility Booking",
     size: "modal-lg",
     bodyHTML: `
@@ -947,7 +947,7 @@ function printSingleBooking(booking, slotStr) {
         : ""
     }
   `;
-  printHTML(`Reservation #${booking.bookingID || ""}`, bodyHTML);
+  printHTML(`Reservation Details`, bodyHTML);
 }
 
 // Open Status Reason Modal — shared by Deny / Cancel / Refund.
