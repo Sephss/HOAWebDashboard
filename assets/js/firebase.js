@@ -81,6 +81,7 @@ export const DB_PATHS = {
   bookingSlots: "BookingSlots",
   bookingsSlot: "BookingSlots",
   hoaRules: "HOARules",
+  emergencyDirectories: "EmergencyDirectories",
 };
 
 /** Roles allowed to sign in to this dashboard. */
