@@ -16,6 +16,7 @@ import { db, ref, onValue, DB_PATHS } from "./firebase.js";
 import { initBackgroundMusic } from "./audio.js";
 
 const ICONS = {
+  rules: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   dashboard: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="8" height="9" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="12" width="8" height="9" rx="2"/><rect x="3" y="16" width="8" height="5" rx="2"/></svg>`,
   users: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke-linecap="round"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke-linecap="round"/></svg>`,
   documents: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke-linejoin="round"/><path d="M14 2v6h6M9 13h6M9 17h6M9 9h1" stroke-linecap="round"/></svg>`,
@@ -97,6 +98,12 @@ const NAV = [
         href: "announcements.html",
         label: "Announcements",
         icon: ICONS.announcements,
+      },
+      {
+        id: "rules",
+        href: "rules.html",
+        label: "Rules & Regulations",
+        icon: ICONS.rules,
       },
       {
         id: "attendees",
