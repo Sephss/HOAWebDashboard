@@ -16,6 +16,7 @@ import {
   formatDateTime,
   getQueryParam,
   escapeHtml,
+  printHTML,
 } from "./utils.js";
 
 const adminProfile = await guardPage();
@@ -42,6 +43,39 @@ content.innerHTML = `
 
 let allUsers = [];
 
+/**
+ * Columns used specifically for the printed resident list (separate from
+ * the on-screen table columns and from csvColumns used by CSV export).
+ * Full name is split into First Name / Last Name, and the Lavanya Phase
+ * Type is included.
+ */
+const PRINT_COLUMNS = [
+  { label: "First Name", value: (r) => r.firstName || "" },
+  { label: "Last Name", value: (r) => r.lastName || "" },
+  { label: "Email", value: (r) => r.email || "" },
+  {
+    label: "Resident Type",
+    value: (r) =>
+      humanize(r.residentType || r.userType || r.accountType || r.role || ""),
+  },
+  { label: "Block", value: (r) => r.block || "" },
+  { label: "Lot", value: (r) => r.lot || "" },
+  { label: "Street", value: (r) => r.street || "" },
+  {
+    label: "Lavanya Phase Type",
+    value: (r) => r.phaseType || r.lavanyaPhaseType || "",
+  },
+];
+
+/** Sort options presented to the admin before printing. */
+const PRINT_SORT_OPTIONS = [
+  { value: "firstName", label: "First Name (A–Z)" },
+  { value: "lastName", label: "Last Name (A–Z)" },
+  { value: "block", label: "Block" },
+  { value: "lot", label: "Lot" },
+  { value: "lavanyaPhase", label: "Lavanya Phase Type" },
+];
+
 const table = new DataTable({
   root: document.getElementById("usersTableRoot"),
   title: "Users",
@@ -58,6 +92,9 @@ const table = new DataTable({
     "residentType",
   ],
   defaultSort: "fullName",
+  // Ask for a sort order before printing instead of using the table's
+  // built-in _print() (which just prints the current on-screen columns).
+  onPrintClick: () => openPrintOptionsModal(),
   columns: [
     {
       key: "fullName",
@@ -496,6 +533,81 @@ function formatAdminActionTimestamp(date = new Date()) {
   hour = hour % 12;
   if (hour === 0) hour = 12;
   return `${month} ${day}, ${year}, ${hour}:${minute} ${period}`;
+}
+
+/**
+ * Ask the admin how they'd like the printed resident list sorted, then
+ * hand off to printResidentsList() with their choice. Runs off of
+ * table.filtered, so it respects whatever search/filters are currently
+ * active on screen — same behavior as the default _print()/_exportCSV().
+ */
+function openPrintOptionsModal() {
+  const overlay = openModal({
+    title: "Print Residents & Users",
+    subtitle: "Choose how the printed list should be sorted.",
+    bodyHTML: `
+      <div class="field">
+        <label>Sort by</label>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:8px;">
+          ${PRINT_SORT_OPTIONS.map(
+            (o, i) => `
+          <label style="display:flex;align-items:center;gap:8px;font-weight:400;cursor:pointer;">
+            <input type="radio" name="printSortBy" value="${o.value}" ${i === 0 ? "checked" : ""}>
+            <span>${o.label}</span>
+          </label>`,
+          ).join("")}
+        </div>
+      </div>
+    `,
+    footerHTML: `
+      <button class="btn btn-secondary" data-act="cancel">Cancel</button>
+      <button class="btn btn-success" data-act="print">Print</button>
+    `,
+  });
+
+  overlay
+    .querySelector('[data-act="cancel"]')
+    .addEventListener("click", () => overlay.close());
+
+  overlay.querySelector('[data-act="print"]').addEventListener("click", () => {
+    const checked = overlay.querySelector('input[name="printSortBy"]:checked');
+    const sortBy = checked ? checked.value : PRINT_SORT_OPTIONS[0].value;
+    overlay.close();
+    printResidentsList(sortBy);
+  });
+}
+
+/** Sorts a copy of the currently filtered rows per `sortBy`, then opens
+ * the print dialog using PRINT_COLUMNS (first/last name split out, plus
+ * Lavanya Phase Type). */
+function printResidentsList(sortBy) {
+  const rows = [...table.filtered];
+
+  const collator = new Intl.Collator(undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+  const comparators = {
+    firstName: (a, b) => collator.compare(a.firstName || "", b.firstName || ""),
+    lastName: (a, b) => collator.compare(a.lastName || "", b.lastName || ""),
+    block: (a, b) => collator.compare(a.block || "", b.block || ""),
+    lot: (a, b) => collator.compare(a.lot || "", b.lot || ""),
+    lavanyaPhase: (a, b) =>
+      collator.compare(
+        a.phaseType || a.lavanyaPhaseType || "",
+        b.phaseType || b.lavanyaPhaseType || "",
+      ),
+  };
+  rows.sort(comparators[sortBy] || comparators.firstName);
+
+  const rowsHTML = rows
+    .map(
+      (r) =>
+        `<tr>${PRINT_COLUMNS.map((c) => `<td>${escapeHtml(String(c.value(r) ?? ""))}</td>`).join("")}</tr>`,
+    )
+    .join("");
+  const tableHTML = `<table><thead><tr>${PRINT_COLUMNS.map((c) => `<th>${c.label}</th>`).join("")}</tr></thead><tbody>${rowsHTML}</tbody></table>`;
+  printHTML("Residents & Users", tableHTML);
 }
 
 function openProfileModal(r) {
