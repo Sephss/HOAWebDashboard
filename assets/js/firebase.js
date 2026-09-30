@@ -83,6 +83,7 @@ export const DB_PATHS = {
   hoaRules: "HOARules",
   emergencyDirectories: "EmergencyDirectories",
   ErrorTicketing: "errorTicketing",
+  communitySolicitations: "CommunitySolicitations",
 };
 
 /** Roles allowed to sign in to this dashboard. */
