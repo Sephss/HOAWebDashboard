@@ -46,16 +46,16 @@ const NAV = [
     section: "Overview",
     links: [
       {
-        id: "dashboard",
-        href: "index.html",
-        label: "Dashboard",
-        icon: ICONS.dashboard,
-      },
-      {
         id: "analytics",
         href: "analytics.html",
         label: "Analytics",
         icon: ICONS.analytics,
+      },
+      {
+        id: "dashboard",
+        href: "index.html",
+        label: "Dashboard",
+        icon: ICONS.dashboard,
       },
     ],
   },
@@ -63,11 +63,22 @@ const NAV = [
     section: "Management",
     links: [
       {
-        id: "users",
-        href: "users.html",
-        label: "Residents & Users",
-        icon: ICONS.users,
-        countKey: "pendingUsers",
+        id: "announcements",
+        href: "announcements.html",
+        label: "Announcements",
+        icon: ICONS.announcements,
+      },
+      {
+        id: "attendees",
+        href: "attendees.html",
+        label: "Attendees",
+        icon: ICONS.attendees,
+      },
+      {
+        id: "solicitations",
+        href: "solicitations.html",
+        label: "Community Solicitation",
+        icon: ICONS.solicitation,
       },
       {
         id: "documents",
@@ -75,6 +86,24 @@ const NAV = [
         label: "Document Requests",
         icon: ICONS.documents,
         countKey: "pendingDocs",
+      },
+      {
+        id: "emergency",
+        href: "emergency.html",
+        label: "Emergency Directory",
+        icon: ICONS.emergency,
+      },
+      {
+        id: "tickets",
+        href: "error-tickets.html",
+        label: "Error Tickets",
+        icon: ICONS.ticket,
+      },
+      {
+        id: "reservations",
+        href: "reservations.html",
+        label: "Facilities Reservation",
+        icon: ICONS.calendar,
       },
       {
         id: "grievances",
@@ -91,22 +120,11 @@ const NAV = [
         countKey: "pendingMaintenance",
       },
       {
-        id: "reservations",
-        href: "reservations.html",
-        label: "Facilities Reservation",
-        icon: ICONS.calendar,
-      },
-      {
-        id: "announcements",
-        href: "announcements.html",
-        label: "Announcements",
-        icon: ICONS.announcements,
-      },
-      {
-        id: "solicitations",
-        href: "solicitations.html",
-        label: "Community Solicitation",
-        icon: ICONS.solicitation,
+        id: "users",
+        href: "users.html",
+        label: "Residents & Users",
+        icon: ICONS.users,
+        countKey: "pendingUsers",
       },
       {
         id: "rules",
@@ -114,40 +132,22 @@ const NAV = [
         label: "Rules & Regulations",
         icon: ICONS.rules,
       },
-      {
-        id: "emergency",
-        href: "emergency.html",
-        label: "Emergency Directory",
-        icon: ICONS.emergency,
-      },
-      {
-        id: "tickets",
-        href: "error-tickets.html",
-        label: "Error Tickets",
-        icon: ICONS.ticket,
-      },
-      {
-        id: "attendees",
-        href: "attendees.html",
-        label: "Attendees",
-        icon: ICONS.attendees,
-      },
     ],
   },
   {
     section: "System",
     links: [
       {
-        id: "settings",
-        href: "settings.html",
-        label: "Settings",
-        icon: ICONS.settings,
-      },
-      {
         id: "about",
         href: "about.html",
         label: "About Us",
         icon: ICONS.info,
+      },
+      {
+        id: "settings",
+        href: "settings.html",
+        label: "Settings",
+        icon: ICONS.settings,
       },
     ],
   },
