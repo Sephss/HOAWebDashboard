@@ -16,6 +16,7 @@ import { db, ref, onValue, DB_PATHS } from "./firebase.js";
 import { initBackgroundMusic } from "./audio.js";
 
 const ICONS = {
+  activityLog: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 8v5l3 2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="13" r="8"/><path d="M9 2h6M12 2v3" stroke-linecap="round"/></svg>`,
   solicitation: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 21s-7-4.35-9.5-9C.7 8.4 2.3 5 5.6 5c1.8 0 3.3 1 4.4 2.4C11.1 6 12.6 5 14.4 5 17.7 5 19.3 8.4 19.5 12c-2.5 4.65-9.5 9-9.5 9z" stroke-linejoin="round"/><path d="M9 12h2l1-2 2 4 1-2h2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   ticket: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8a2 2 0 002-2h12a2 2 0 002 2v2a2 2 0 000 4v2a2 2 0 00-2 2H6a2 2 0 00-2-2v-2a2 2 0 000-4V8z" stroke-linejoin="round"/><path d="M14 6v12" stroke-dasharray="2 2" stroke-linecap="round"/></svg>`,
   emergency: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2L2 7v6c0 5.5 3.8 9.7 10 11 6.2-1.3 10-5.5 10-11V7l-10-5z" stroke-linejoin="round"/><path d="M12 8v5M12 16.5v.01" stroke-linecap="round"/></svg>`,
@@ -142,6 +143,12 @@ const NAV = [
         href: "about.html",
         label: "About Us",
         icon: ICONS.info,
+      },
+      {
+        id: "activityLog",
+        href: "activity-log.html",
+        label: "Activity Log",
+        icon: ICONS.activityLog,
       },
       {
         id: "settings",

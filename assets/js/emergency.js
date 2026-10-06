@@ -20,6 +20,7 @@ import {
 import { DataTable } from "./tables.js";
 import { toast, openModal, confirmDialog } from "./ui.js";
 import { uploadImage } from "./imageUpload.js";
+import { logActivity } from "./activityLogger.js";
 import {
   objectToArray,
   formatDate,
@@ -386,6 +387,12 @@ function openEditorModal(existing) {
             payload,
           );
           toast({ type: "success", title: "Entry updated" });
+          await logActivity(adminProfile, {
+            action: "Edited",
+            module: "Emergency Directory",
+            targetName: title,
+            details: `Updated category "${category}"`,
+          });
         } else {
           const {
             dateStr: dateCreated,
@@ -408,6 +415,12 @@ function openEditorModal(existing) {
           };
           await set(newRef, fullPayload);
           toast({ type: "success", title: "Entry published" });
+          await logActivity(adminProfile, {
+            action: "Posted",
+            module: "Emergency Directory",
+            targetName: title,
+            details: `Published under category "${category}"`,
+          });
         }
         overlay.close();
       } catch (err) {
@@ -427,6 +440,12 @@ async function deleteEntry(r) {
   try {
     await remove(ref(db, `${DB_PATHS.emergencyDirectories}/${r.id}`));
     toast({ type: "success", title: "Entry deleted" });
+    await logActivity(adminProfile, {
+      action: "Deleted",
+      module: "Emergency Directory",
+      targetName: r.title || "Untitled Entry",
+      details: `Category: ${r.category || "Other"}`,
+    });
   } catch (err) {
     toast({ type: "danger", title: "Delete failed", desc: err.message });
   }

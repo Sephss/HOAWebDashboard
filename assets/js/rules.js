@@ -20,6 +20,7 @@ import {
 import { DataTable } from "./tables.js";
 import { toast, openModal, confirmDialog } from "./ui.js";
 import { uploadImage } from "./imageUpload.js";
+import { logActivity } from "./activityLogger.js";
 import {
   objectToArray,
   formatDate,
@@ -384,6 +385,12 @@ function openEditorModal(existing) {
           // those describe the original posting and stay fixed.
           await update(ref(db, `${DB_PATHS.hoaRules}/${existing.id}`), payload);
           toast({ type: "success", title: "Rule updated" });
+          await logActivity(adminProfile, {
+            action: "Edited",
+            module: "Rules & Regulations",
+            targetName: title,
+            details: `Updated category "${category}"`,
+          });
         } else {
           const {
             dateStr: dateCreated,
@@ -406,6 +413,12 @@ function openEditorModal(existing) {
           };
           await set(newRef, fullPayload);
           toast({ type: "success", title: "Rule published" });
+          await logActivity(adminProfile, {
+            action: "Posted",
+            module: "Rules & Regulations",
+            targetName: title,
+            details: `Published under category "${category}"`,
+          });
         }
         overlay.close();
       } catch (err) {
@@ -425,6 +438,12 @@ async function deleteRule(r) {
   try {
     await remove(ref(db, `${DB_PATHS.hoaRules}/${r.id}`));
     toast({ type: "success", title: "Rule deleted" });
+    await logActivity(adminProfile, {
+      action: "Deleted",
+      module: "Rules & Regulations",
+      targetName: r.title || "Untitled Rule",
+      details: `Category: ${r.category || "General"}`,
+    });
   } catch (err) {
     toast({ type: "danger", title: "Delete failed", desc: err.message });
   }

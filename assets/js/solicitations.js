@@ -39,6 +39,8 @@ import { openModal, emptyState, toast } from "./ui.js";
 // Expected contract: uploadImage(file) -> Promise<string imageUrl>
 import { uploadImage } from "./imageUpload.js";
 
+import { logActivity } from "./activityLogger.js";
+
 const adminProfile = await guardPage();
 renderShell("solicitations", adminProfile, {
   breadcrumb: "Community Solicitation",
@@ -361,6 +363,12 @@ function openEditorModal(existing) {
             title: "Updated",
             desc: "Solicitation updated.",
           });
+          await logActivity(adminProfile, {
+            action: "Edited",
+            module: "Community Solicitation",
+            targetName: title,
+            details: "Updated solicitation details",
+          });
         } else {
           const newRef = push(ref(db, DB_PATHS.communitySolicitations));
           const now = new Date();
@@ -384,6 +392,12 @@ function openEditorModal(existing) {
             type: "success",
             title: "Posted",
             desc: "Solicitation is now live for residents.",
+          });
+          await logActivity(adminProfile, {
+            action: "Posted",
+            module: "Community Solicitation",
+            targetName: title,
+            details: "Published a new solicitation",
           });
         }
         overlay.close();
@@ -413,6 +427,11 @@ async function toggleStatus(solicitId) {
         nextStatus === "closed"
           ? "Residents will no longer see this as active."
           : "This solicitation is active again.",
+    });
+    await logActivity(adminProfile, {
+      action: nextStatus === "closed" ? "Closed" : "Reopened",
+      module: "Community Solicitation",
+      targetName: s.title || "Untitled Solicitation",
     });
   } catch (err) {
     toast({ type: "danger", title: "Update failed", desc: err.message });
@@ -450,6 +469,12 @@ function deleteSolicit(solicitId) {
           type: "success",
           title: "Deleted",
           desc: "Solicitation removed.",
+        });
+        await logActivity(adminProfile, {
+          action: "Deleted",
+          module: "Community Solicitation",
+          targetName: s.title || "Untitled Solicitation",
+          details: `Removed along with ${getContributions(s).length} contribution record(s)`,
         });
         overlay.close();
       } catch (err) {

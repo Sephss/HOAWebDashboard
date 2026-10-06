@@ -84,6 +84,7 @@ export const DB_PATHS = {
   emergencyDirectories: "EmergencyDirectories",
   ErrorTicketing: "errorTicketing",
   communitySolicitations: "CommunitySolicitations",
+  activityLogs: "ActivityLogs",
 };
 
 /** Roles allowed to sign in to this dashboard. */

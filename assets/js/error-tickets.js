@@ -10,6 +10,7 @@ import { db, ref, onValue, update, DB_PATHS } from "./firebase.js";
 import { DataTable } from "./tables.js";
 import { toast, openModal } from "./ui.js";
 import { formatDate, formatDateTime, escapeHtml, printHTML } from "./utils.js";
+import { logActivity } from "./activityLogger.js";
 
 const adminProfile = await guardPage();
 renderShell("tickets", adminProfile, { breadcrumb: "Error Tickets" });
@@ -419,6 +420,12 @@ function openDetailModal(t) {
           type: "success",
           title: "Ticket updated",
           desc: `Status set to ${newStatus}.`,
+        });
+        await logActivity(adminProfile, {
+          action: "Updated Status",
+          module: "Error Tickets",
+          targetName: t.title || "Untitled Ticket",
+          details: `Status changed from "${currentStatus}" to "${newStatus}"${adminRemarks ? ` — Remarks: ${adminRemarks}` : ""}`,
         });
         overlay.close();
       } catch (err) {

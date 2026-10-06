@@ -943,3 +943,7 @@
   color: var(--color-grey);
   font-weight: 600;
 }
+.badge-danger {
+  background: #fdecea;
+  color: #b3261e;
+}

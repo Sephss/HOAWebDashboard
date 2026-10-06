@@ -34,6 +34,8 @@ import {
   printHTML,
 } from "./utils.js";
 
+import { logActivity } from "./activityLogger.js"; // NEW
+
 const adminProfile = await guardPage();
 renderShell("announcements", adminProfile, { breadcrumb: "Announcements" });
 
@@ -424,6 +426,12 @@ function openEditorModal(existing) {
             payload,
           );
           toast({ type: "success", title: "Announcement updated" });
+          await logActivity(adminProfile, {
+            action: "Edited",
+            module: "Announcements",
+            targetName: title,
+            details: `Updated category "${category}"`,
+          });
         } else {
           const {
             dateStr: dateCreated,
@@ -446,6 +454,12 @@ function openEditorModal(existing) {
           };
           await set(newRef, fullPayload);
           toast({ type: "success", title: "Announcement published" });
+          await logActivity(adminProfile, {
+            action: "Posted",
+            module: "Announcements",
+            targetName: title,
+            details: `Published under category "${category}"`,
+          });
         }
         overlay.close();
       } catch (err) {
@@ -465,6 +479,12 @@ async function deleteAnnouncement(r) {
   try {
     await remove(ref(db, `${DB_PATHS.announcements}/${r.id}`));
     toast({ type: "success", title: "Announcement deleted" });
+    await logActivity(adminProfile, {
+      action: "Deleted",
+      module: "Announcements",
+      targetName: r.title || "Untitled Announcement",
+      details: `Category: ${r.category || "General"}`,
+    });
   } catch (err) {
     toast({ type: "danger", title: "Delete failed", desc: err.message });
   }
