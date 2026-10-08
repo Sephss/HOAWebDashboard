@@ -4,6 +4,7 @@
 import { guardPage } from "./auth.js";
 import { renderShell } from "./sidebar.js";
 import { db, ref, onValue, update, remove, DB_PATHS } from "./firebase.js";
+import { logActivity } from "./activityLogger.js";
 import { DataTable } from "./tables.js";
 import { toast, openModal, confirmDialog, initDropdown } from "./ui.js";
 import {
@@ -462,6 +463,20 @@ async function handleUserAction(act, row) {
       title: "Account updated",
       desc: `${name}'s status was updated successfully.`,
     });
+    const logLabels = {
+      approve: ["Approved", "Approved resident registration"],
+      disable: ["Disabled", "Disabled resident account"],
+      enable: ["Enabled", "Re-enabled resident account"],
+      ban: ["Banned", "Banned resident account"],
+      unban: ["Unbanned", "Removed ban from resident account"],
+      unarchive: ["Unarchived", "Restored resident account from archive"],
+    };
+    await logActivity(adminProfile, {
+      action: logLabels[act][0],
+      module: "Residents & Users",
+      targetName: name,
+      details: logLabels[act][1],
+    });
   } catch (err) {
     toast({ type: "danger", title: "Update failed", desc: err.message });
   }
@@ -513,6 +528,12 @@ function openArchiveReasonModal(row) {
           type: "success",
           title: "Account archived",
           desc: `${name}'s account was archived.`,
+        });
+        await logActivity(adminProfile, {
+          action: "Archived",
+          module: "Residents & Users",
+          targetName: name,
+          details: `Reason: ${reason}`,
         });
         overlay.close();
       } catch (err) {

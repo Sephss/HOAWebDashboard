@@ -9,6 +9,7 @@
 import { guardPage } from "./auth.js";
 import { renderShell } from "./sidebar.js";
 import { db, ref, onValue, update, push, set, DB_PATHS } from "./firebase.js";
+import { logActivity } from "./activityLogger.js";
 import { DataTable } from "./tables.js";
 import { toast, openModal } from "./ui.js";
 import {
@@ -345,6 +346,15 @@ function openDetailModal(r) {
           type: "success",
           title: "Request updated",
           desc: `Status set to ${statusLabel(newStatus)}.`,
+        });
+        await logActivity(adminProfile, {
+          action: "Updated Status",
+          module: "Document Requests",
+          targetName: `${r.documentType || "Document"} — ${r.requesterName || "Unknown"} (${r.requestTicket || r.requestID})`,
+          details:
+            newStatus !== currentToken
+              ? `Status changed from "${statusLabel(currentToken)}" to "${statusLabel(newStatus)}"${adminNote ? ` — Note: ${adminNote}` : ""}`
+              : `Updated admin response (status remains "${statusLabel(newStatus)}")`,
         });
         overlay.close();
       } catch (err) {
