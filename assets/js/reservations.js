@@ -34,6 +34,7 @@ import {
 } from "./utils.js";
 import { toast, openModal } from "./ui.js";
 import { uploadImage } from "./imageUpload.js";
+import { logActivity } from "./activityLogger.js";
 
 const adminProfile = await guardPage();
 renderShell("reservations", adminProfile, {
@@ -898,6 +899,12 @@ function openBookingDetailModal(bookingID) {
           title: "Reservation approved",
           desc: `OR #${orNumber} recorded.`,
         });
+        await logActivity(adminProfile, {
+          action: "Approved",
+          module: "Facilities Reservation",
+          targetName: `${booking.bookerSport || "Facility"} — ${booking.bookerName || "Unknown"}`,
+          details: `Approved reservation for ${booking.requestBookingDate || ""} (${slotStr}) — OR #${orNumber}, Amount: ${amount}, Received by: ${paymentReceivedBy}`,
+        });
         overlay.close();
       } catch (err) {
         toast({
@@ -1028,6 +1035,17 @@ function openStatusReasonModal(bookingID, facility, dateStr, slotStr, action) {
         toast({
           type: "success",
           title: `Reservation ${cfg.status} and slot released!`,
+        });
+        const loggedBooking = dataBookings.find(
+          (b) => b.bookingID === bookingID,
+        );
+        await logActivity(adminProfile, {
+          action: { deny: "Denied", cancel: "Cancelled", refund: "Refunded" }[
+            action
+          ],
+          module: "Facilities Reservation",
+          targetName: `${facility || "Facility"} — ${loggedBooking?.bookerName || "Unknown"}`,
+          details: `${dateStr || ""} (${slotStr || ""}) — Reason: ${reason}`,
         });
       } catch (err) {
         console.error(`${action} error:`, err);
@@ -1462,6 +1480,12 @@ function openCreateReservationModal() {
             type: "success",
             title: "Reservation created",
             desc: `${bookerName} — ${sport} on ${selectedCreateDate}.`,
+          });
+          await logActivity(adminProfile, {
+            action: "Created",
+            module: "Facilities Reservation",
+            targetName: `${sport} — ${bookerName}`,
+            details: `Created confirmed reservation for ${selectedCreateDate} (${selectedCreateSlot}) — OR #${orNumber}, Amount: ${amount}`,
           });
           overlay.close();
         } catch (bookingErr) {

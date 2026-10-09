@@ -7,6 +7,7 @@
 import { guardPage } from "./auth.js";
 import { renderShell } from "./sidebar.js";
 import { db, ref, onValue, update, push, set, DB_PATHS } from "./firebase.js";
+import { logActivity } from "./activityLogger.js";
 import { DataTable } from "./tables.js";
 import { toast, openModal } from "./ui.js";
 import {
@@ -300,6 +301,15 @@ function openDetailModal(r) {
           type: "success",
           title: "Report updated",
           desc: `Status set to ${statusLabel(newStatus)}.`,
+        });
+        await logActivity(adminProfile, {
+          action: "Updated Status",
+          module: "Grievance Reports",
+          targetName: `${r.incidentTitle || "Untitled"} (${r.incidentTicket || r.incidentReportID || r.id})`,
+          details:
+            newStatus !== currentToken
+              ? `Status changed from "${statusLabel(currentToken)}" to "${statusLabel(newStatus)}"${adminRemarks ? ` — Remarks: ${adminRemarks}` : ""}`
+              : `Updated admin remarks (status remains "${statusLabel(newStatus)}")`,
         });
         overlay.close();
       } catch (err) {
