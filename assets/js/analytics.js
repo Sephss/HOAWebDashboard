@@ -112,6 +112,98 @@ content.innerHTML = `
   </div>
 `;
 
+/* ===== EXTENDED ANALYTICS — HTML (added after the original layout) ===== */
+content.insertAdjacentHTML(
+  "beforeend",
+  `
+  <div class="card" style="margin:24px 0 16px;">
+    <div class="card-body">
+      <div class="kpi-row" id="extraKpiRow"></div>
+    </div>
+  </div>
+
+  <div class="section-title" style="margin:8px 0 12px;">Emergency Directory & HOA Rules</div>
+  <div class="chart-grid">
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">Emergency Entries by Category</div><div class="chart-card__subtitle">Hospitals, police, fire, barangay and more</div></div></div>
+      <div id="emergencyCategoryChart"></div>
+    </div>
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">Emergency Entries Posted</div><div class="chart-card__subtitle">New directory entries over time</div></div></div>
+      <div id="emergencyOverTimeChart"></div>
+    </div>
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">HOA Rules by Category</div><div class="chart-card__subtitle">Distribution of published rules</div></div></div>
+      <div id="rulesCategoryChart"></div>
+    </div>
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">HOA Rules Posted</div><div class="chart-card__subtitle">New rules over time</div></div></div>
+      <div id="rulesOverTimeChart"></div>
+    </div>
+  </div>
+
+  <div class="section-title" style="margin:24px 0 12px;">Community Solicitation</div>
+  <div class="chart-grid">
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">Solicitation Status</div><div class="chart-card__subtitle">Active vs closed drives</div></div></div>
+      <div id="solicitStatusChart"></div>
+    </div>
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">Contributions Over Time</div><div class="chart-card__subtitle">Contributions submitted by residents</div></div></div>
+      <div id="solicitOverTimeChart"></div>
+    </div>
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">Total Collected per Solicitation</div><div class="chart-card__subtitle">Top 6 by amount (₱)</div></div></div>
+      <div id="solicitCollectedChart"></div>
+    </div>
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">Contributors per Solicitation</div><div class="chart-card__subtitle">Top 6 by participation</div></div></div>
+      <div id="solicitContributorsChart"></div>
+    </div>
+  </div>
+
+  <div class="section-title" style="margin:24px 0 12px;">Error Tickets & Feedback</div>
+  <div class="chart-grid">
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">Ticket Status</div><div class="chart-card__subtitle">Pending, in progress, resolved, rejected</div></div></div>
+      <div id="ticketStatusChart"></div>
+    </div>
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">Bugs vs Suggestions</div><div class="chart-card__subtitle">What residents are reporting</div></div></div>
+      <div id="ticketCategoryChart"></div>
+    </div>
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">Tickets Over Time</div><div class="chart-card__subtitle">Submissions per day</div></div></div>
+      <div id="ticketsOverTimeChart"></div>
+    </div>
+  </div>
+
+  <div class="section-title" style="margin:24px 0 12px;">Facilities Reservation</div>
+  <div class="chart-grid">
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">Reservation Status</div><div class="chart-card__subtitle">Pending, confirmed, denied, cancelled, refunded</div></div></div>
+      <div id="bookingStatusChart"></div>
+    </div>
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">Bookings Over Time</div><div class="chart-card__subtitle">Reservations made per day</div></div></div>
+      <div id="bookingsOverTimeChart"></div>
+    </div>
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">Most Booked Facilities</div></div></div>
+      <div id="bookingFacilityChart"></div>
+    </div>
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">Revenue by Facility</div><div class="chart-card__subtitle">Confirmed bookings only (₱)</div></div></div>
+      <div id="bookingRevenueChart"></div>
+    </div>
+    <div class="card chart-card">
+      <div class="chart-card__header"><div><div class="chart-card__title">Popular Time Slots</div></div></div>
+      <div id="bookingSlotChart"></div>
+    </div>
+  </div>
+`,
+);
+
 let dataStore = {
   users: [],
   docs: [],
@@ -119,6 +211,16 @@ let dataStore = {
   maintenance: [],
   announcements: [],
 };
+
+/** Separate store for the extended modules so dataStore stays untouched. */
+const extraStore = {
+  emergency: [],
+  rules: [],
+  solicits: [],
+  tickets: [],
+  bookings: [],
+};
+
 let rangeDays = 30;
 
 document.getElementById("rangeTabs").addEventListener("click", (e) => {
@@ -143,6 +245,30 @@ bindLive(DB_PATHS.documentRequests, "docs");
 bindLive(DB_PATHS.grievanceReports, "grievances");
 bindLive(DB_PATHS.maintenanceRequests, "maintenance");
 bindLive(DB_PATHS.announcements, "announcements");
+
+function bindExtra(path, key, transform) {
+  onValue(ref(db, path), (snap) => {
+    extraStore[key] = transform
+      ? transform(snap.val())
+      : objectToArray(snap.val());
+    renderAll();
+  });
+}
+bindExtra(DB_PATHS.emergencyDirectories, "emergency");
+bindExtra(DB_PATHS.hoaRules, "rules");
+bindExtra(DB_PATHS.communitySolicitations, "solicits");
+bindExtra(DB_PATHS.bookings, "bookings");
+// errorTicketing is nested: userID > ticketID > data, so flatten it first.
+bindExtra(DB_PATHS.ErrorTicketing, "tickets", (root) => {
+  const out = [];
+  Object.values(root || {}).forEach((userTickets) => {
+    if (!userTickets || typeof userTickets !== "object") return;
+    Object.values(userTickets).forEach((t) => {
+      if (t && typeof t === "object") out.push(t);
+    });
+  });
+  return out;
+});
 
 window.addEventListener(
   "resize",
@@ -205,6 +331,7 @@ function renderAll() {
   renderPendingCompleted();
   // TEMPORARILY DISABLED — see matching HTML comment above. Uncomment to restore.
   // renderMonthlyGrowth();
+  renderExtras();
 }
 
 function renderKPIs() {
@@ -459,3 +586,255 @@ function renderPendingCompleted() {
 //     color: PALETTE[0],
 //   });
 // }
+
+/* ============================================================
+   EXTENDED ANALYTICS — Emergency, HOA Rules, Solicitation,
+   Error Tickets, Facilities Reservation.
+   ============================================================ */
+
+const peso = (n) =>
+  `₱${Number(n || 0).toLocaleString("en-PH", { maximumFractionDigits: 2 })}`;
+
+function countBy(items, getKey) {
+  const counts = {};
+  items.forEach((it) => {
+    const k = getKey(it) || "Unspecified";
+    counts[k] = (counts[k] || 0) + 1;
+  });
+  return counts;
+}
+
+function donutFromCounts(counts) {
+  const data = Object.entries(counts).map(([label, value], i) => ({
+    label,
+    value,
+    color: PALETTE[i % PALETTE.length],
+  }));
+  return data.length ? data : [{ label: "No data", value: 0 }];
+}
+
+function miniBarFromCounts(counts, limit = 6) {
+  const data = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([label, value]) => ({ label, value }));
+  return data.length ? data : [{ label: "No data", value: 0 }];
+}
+
+function ticketStatus(t) {
+  const s = String(t.status || "Pending").toLowerCase();
+  if (s === "in progress") return "In Progress";
+  if (s === "resolved") return "Resolved";
+  if (s === "rejected") return "Rejected";
+  return "Pending";
+}
+
+function bookingStatusLabel(b) {
+  const s = String(b.bookingStatus || "confirmed").toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function bookingSlotLabel(b) {
+  return b.requestBookingTimeIn && b.requestBookingsTimeOut
+    ? `${b.requestBookingTimeIn} - ${b.requestBookingsTimeOut}`
+    : b.slot || "Unspecified";
+}
+
+/** Flattens CommunitySolicitations > id > contributions > uid into one list. */
+function allContributions() {
+  const out = [];
+  extraStore.solicits.forEach((s) => {
+    objectToArray(s.contributions).forEach((c) =>
+      out.push({ ...c, _solicitTitle: s.title || "Untitled" }),
+    );
+  });
+  return out;
+}
+
+function solicitCollected(s) {
+  return objectToArray(s.contributions).reduce(
+    (sum, c) => sum + (Number(c.amountSent) || 0),
+    0,
+  );
+}
+
+function renderExtras() {
+  const { emergency, rules, solicits, tickets, bookings } = extraStore;
+  const contributions = allContributions();
+  const { labels } = dateBuckets(rangeDays);
+
+  // ---------- KPIs ----------
+  const totalCollected = contributions.reduce(
+    (sum, c) => sum + (Number(c.amountSent) || 0),
+    0,
+  );
+  const activeSolicits = solicits.filter(
+    (s) => (s.status || "active") === "active",
+  ).length;
+  const resolvedTickets = tickets.filter(
+    (t) => ticketStatus(t) === "Resolved",
+  ).length;
+  const ticketResolutionRate = tickets.length
+    ? Math.round((resolvedTickets / tickets.length) * 100)
+    : 0;
+  const confirmedBookings = bookings.filter(
+    (b) => String(b.bookingStatus || "confirmed").toLowerCase() === "confirmed",
+  );
+  const bookingRevenue = confirmedBookings.reduce(
+    (sum, b) => sum + (Number(b.bookingAmount) || 0),
+    0,
+  );
+
+  const extraKpis = [
+    { value: emergency.length, label: "Emergency Entries" },
+    { value: rules.length, label: "HOA Rules" },
+    { value: activeSolicits, label: "Active Solicitations" },
+    { value: peso(totalCollected), label: "Total Collected" },
+    { value: tickets.length, label: "Error Tickets" },
+    { value: `${ticketResolutionRate}%`, label: "Ticket Resolution Rate" },
+    { value: bookings.length, label: "Reservations" },
+    { value: peso(bookingRevenue), label: "Reservation Revenue" },
+  ];
+  document.getElementById("extraKpiRow").innerHTML = extraKpis
+    .map(
+      (k) =>
+        `<div class="kpi-mini"><div class="kpi-mini__value">${k.value}</div><div class="kpi-mini__label">${k.label}</div></div>`,
+    )
+    .join("");
+
+  // ---------- Emergency Directory ----------
+  renderMiniBarList(document.getElementById("emergencyCategoryChart"), {
+    data: miniBarFromCounts(
+      countBy(emergency, (e) => e.category),
+      8,
+    ),
+    color: PALETTE[3],
+  });
+  renderBarChart(document.getElementById("emergencyOverTimeChart"), {
+    labels,
+    data: bucketCounts(emergency, "timestamp", rangeDays).data,
+    color: PALETTE[3],
+  });
+
+  // ---------- HOA Rules ----------
+  renderDonutChart(document.getElementById("rulesCategoryChart"), {
+    data: donutFromCounts(countBy(rules, (r) => r.category)),
+  });
+  renderBarChart(document.getElementById("rulesOverTimeChart"), {
+    labels,
+    data: bucketCounts(rules, "timestamp", rangeDays).data,
+    color: PALETTE[1],
+  });
+
+  // ---------- Community Solicitation ----------
+  renderDonutChart(document.getElementById("solicitStatusChart"), {
+    data: donutFromCounts(
+      countBy(solicits, (s) =>
+        (s.status || "active") === "active" ? "Active" : "Closed",
+      ),
+    ),
+  });
+  renderLineChart(document.getElementById("solicitOverTimeChart"), {
+    labels,
+    series: [
+      {
+        name: "Contributions",
+        data: bucketCounts(contributions, "timestamp", rangeDays).data,
+        color: PALETTE[0],
+        area: false,
+      },
+    ],
+  });
+  const collectedData = solicits
+    .map((s) => ({
+      label: s.title || "Untitled",
+      value: solicitCollected(s),
+    }))
+    .filter((d) => d.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 6);
+  renderMiniBarList(document.getElementById("solicitCollectedChart"), {
+    data: collectedData.length
+      ? collectedData
+      : [{ label: "No data", value: 0 }],
+    color: PALETTE[2],
+  });
+  const contributorData = solicits
+    .map((s) => ({
+      label: s.title || "Untitled",
+      value: objectToArray(s.contributions).length,
+    }))
+    .filter((d) => d.value > 0)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 6);
+  renderMiniBarList(document.getElementById("solicitContributorsChart"), {
+    data: contributorData.length
+      ? contributorData
+      : [{ label: "No data", value: 0 }],
+    color: PALETTE[4],
+  });
+
+  // ---------- Error Tickets ----------
+  renderDonutChart(document.getElementById("ticketStatusChart"), {
+    data: donutFromCounts(countBy(tickets, ticketStatus)),
+  });
+  renderDonutChart(document.getElementById("ticketCategoryChart"), {
+    data: donutFromCounts(
+      countBy(tickets, (t) =>
+        String(t.category || "")
+          .toLowerCase()
+          .includes("bug")
+          ? "Bug / Error"
+          : "Suggestion / Feature",
+      ),
+    ),
+  });
+  renderLineChart(document.getElementById("ticketsOverTimeChart"), {
+    labels,
+    series: [
+      {
+        name: "Tickets",
+        data: bucketCounts(tickets, "timestamp", rangeDays).data,
+        color: PALETTE[1],
+        area: false,
+      },
+    ],
+  });
+
+  // ---------- Facilities Reservation ----------
+  renderDonutChart(document.getElementById("bookingStatusChart"), {
+    data: donutFromCounts(countBy(bookings, bookingStatusLabel)),
+  });
+  renderLineChart(document.getElementById("bookingsOverTimeChart"), {
+    labels,
+    series: [
+      {
+        name: "Bookings",
+        data: bucketCounts(bookings, "timestamp", rangeDays).data,
+        color: PALETTE[0],
+        area: false,
+      },
+    ],
+  });
+  renderMiniBarList(document.getElementById("bookingFacilityChart"), {
+    data: miniBarFromCounts(
+      countBy(bookings, (b) => b.bookerSport),
+      6,
+    ),
+    color: PALETTE[0],
+  });
+  const revenueByFacility = {};
+  confirmedBookings.forEach((b) => {
+    const k = b.bookerSport || "Unspecified";
+    revenueByFacility[k] =
+      (revenueByFacility[k] || 0) + (Number(b.bookingAmount) || 0);
+  });
+  renderMiniBarList(document.getElementById("bookingRevenueChart"), {
+    data: miniBarFromCounts(revenueByFacility, 6),
+    color: PALETTE[2],
+  });
+  renderMiniBarList(document.getElementById("bookingSlotChart"), {
+    data: miniBarFromCounts(countBy(bookings, bookingSlotLabel), 4),
+    color: PALETTE[3],
+  });
+}
