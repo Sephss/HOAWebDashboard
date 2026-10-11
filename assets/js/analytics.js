@@ -4,7 +4,14 @@
 import { guardPage } from "./auth.js";
 import { renderShell } from "./sidebar.js";
 import { db, ref, onValue, DB_PATHS } from "./firebase.js";
-import { objectToArray, isYes, humanize, statusToken } from "./utils.js";
+import {
+  objectToArray,
+  isYes,
+  humanize,
+  statusToken,
+  printHTML,
+  escapeHtml,
+} from "./utils.js";
 import {
   renderLineChart,
   renderBarChart,
@@ -24,6 +31,10 @@ content.innerHTML = `
       <div class="page-header__subtitle">Community growth, request trends, and operational performance.</div>
     </div>
     <div class="page-header__actions">
+      <button class="btn btn-secondary" id="printAnalyticsBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z" stroke-linejoin="round"/></svg>
+        Print Report
+      </button>
       <div class="tabs" style="border:none;margin:0;" id="rangeTabs">
         <button class="tab-btn active" data-range="30">30 Days</button>
         <button class="tab-btn" data-range="90">90 Days</button>
@@ -233,6 +244,10 @@ document.getElementById("rangeTabs").addEventListener("click", (e) => {
   rangeDays = Number(btn.dataset.range);
   renderAll();
 });
+
+document
+  .getElementById("printAnalyticsBtn")
+  .addEventListener("click", () => printReport());
 
 function bindLive(path, key) {
   onValue(ref(db, path), (snap) => {
@@ -837,4 +852,172 @@ function renderExtras() {
     data: miniBarFromCounts(countBy(bookings, bookingSlotLabel), 4),
     color: PALETTE[3],
   });
+}
+
+/* ============================================================
+   PRINT REPORT — printable summary of the analytics data.
+   Charts don't print cleanly, so the report uses tables with
+   the same numbers the charts are built from (all-time totals).
+   ============================================================ */
+
+function printTable(headers, rows, footerRow) {
+  if (!rows.length) {
+    return `<div style="font-size:12px;color:#5C5F61;">No data.</div>`;
+  }
+  const thead = `<tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr>`;
+  const tbody = rows
+    .map(
+      (r) =>
+        `<tr>${r.map((c) => `<td>${escapeHtml(String(c ?? "—"))}</td>`).join("")}</tr>`,
+    )
+    .join("");
+  const tfoot = footerRow
+    ? `<tr>${footerRow.map((c) => `<td><strong>${escapeHtml(String(c ?? ""))}</strong></td>`).join("")}</tr>`
+    : "";
+  return `<table><thead>${thead}</thead><tbody>${tbody}${tfoot}</tbody></table>`;
+}
+
+function printSection(title, innerHTML) {
+  return `<h2 style="font-size:14px;color:#013717;margin:24px 0 8px;">${escapeHtml(title)}</h2>${innerHTML}`;
+}
+
+function countRows(counts) {
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+}
+
+function printReport() {
+  const { emergency, rules, solicits, tickets, bookings } = extraStore;
+  const { users, docs, grievances, maintenance } = dataStore;
+  const contributions = allContributions();
+
+  const totalCollected = contributions.reduce(
+    (sum, c) => sum + (Number(c.amountSent) || 0),
+    0,
+  );
+  const confirmedBookings = bookings.filter(
+    (b) => String(b.bookingStatus || "confirmed").toLowerCase() === "confirmed",
+  );
+  const bookingRevenue = confirmedBookings.reduce(
+    (sum, b) => sum + (Number(b.bookingAmount) || 0),
+    0,
+  );
+
+  // Overview
+  const overview = printTable(
+    ["Metric", "Value"],
+    [
+      ["Total Residents", users.length],
+      ["Document Requests", docs.length],
+      ["Grievance Reports", grievances.length],
+      ["Maintenance Requests", maintenance.length],
+      ["Emergency Entries", emergency.length],
+      ["HOA Rules", rules.length],
+      ["Community Solicitations", solicits.length],
+      ["Total Collected (Solicitations)", peso(totalCollected)],
+      ["Error Tickets", tickets.length],
+      ["Reservations", bookings.length],
+      ["Reservation Revenue (Confirmed)", peso(bookingRevenue)],
+    ],
+  );
+
+  // Solicitations: per-solicitation totals with a grand total
+  const solicitRows = [...solicits]
+    .sort((a, b) => Number(b.timestamp || 0) - Number(a.timestamp || 0))
+    .map((s) => [
+      s.title || "Untitled",
+      (s.status || "active") === "active" ? "Active" : "Closed",
+      s.dateCreated || "—",
+      objectToArray(s.contributions).length,
+      peso(solicitCollected(s)),
+    ]);
+  const solicitTable = printTable(
+    [
+      "Solicitation",
+      "Status",
+      "Date Posted",
+      "Contributors",
+      "Total Collected",
+    ],
+    solicitRows,
+    solicitRows.length
+      ? ["Grand Total", "", "", contributions.length, peso(totalCollected)]
+      : null,
+  );
+
+  // Emergency / rules
+  const emergencyTable = printTable(
+    ["Category", "Entries"],
+    countRows(countBy(emergency, (e) => e.category)),
+  );
+  const rulesTable = printTable(
+    ["Category", "Rules"],
+    countRows(countBy(rules, (r) => r.category)),
+  );
+
+  // Error tickets
+  const ticketStatusTable = printTable(
+    ["Status", "Tickets"],
+    countRows(countBy(tickets, ticketStatus)),
+  );
+  const ticketCategoryTable = printTable(
+    ["Type", "Tickets"],
+    countRows(
+      countBy(tickets, (t) =>
+        String(t.category || "")
+          .toLowerCase()
+          .includes("bug")
+          ? "Bug / Error"
+          : "Suggestion / Feature",
+      ),
+    ),
+  );
+
+  // Reservations
+  const bookingStatusTable = printTable(
+    ["Status", "Reservations"],
+    countRows(countBy(bookings, bookingStatusLabel)),
+  );
+  const revenueByFacility = {};
+  const bookingsByFacility = {};
+  bookings.forEach((b) => {
+    const k = b.bookerSport || "Unspecified";
+    bookingsByFacility[k] = (bookingsByFacility[k] || 0) + 1;
+  });
+  confirmedBookings.forEach((b) => {
+    const k = b.bookerSport || "Unspecified";
+    revenueByFacility[k] =
+      (revenueByFacility[k] || 0) + (Number(b.bookingAmount) || 0);
+  });
+  const facilityRows = countRows(bookingsByFacility).map(([name, count]) => [
+    name,
+    count,
+    peso(revenueByFacility[name] || 0),
+  ]);
+  const facilityTable = printTable(
+    ["Facility", "Reservations", "Revenue (Confirmed)"],
+    facilityRows,
+    facilityRows.length
+      ? ["Total", bookings.length, peso(bookingRevenue)]
+      : null,
+  );
+
+  const generated = new Date().toLocaleString("en-US", {
+    timeZone: "Asia/Manila",
+    dateStyle: "long",
+    timeStyle: "short",
+  });
+
+  const bodyHTML = `
+    <div style="font-size:12px;color:#5C5F61;margin-bottom:8px;">Generated ${escapeHtml(generated)} · All-time totals</div>
+    ${printSection("Overview", overview)}
+    ${printSection("Community Solicitation", solicitTable)}
+    ${printSection("Emergency Directory by Category", emergencyTable)}
+    ${printSection("HOA Rules by Category", rulesTable)}
+    ${printSection("Error Tickets by Status", ticketStatusTable)}
+    ${printSection("Error Tickets: Bugs vs Suggestions", ticketCategoryTable)}
+    ${printSection("Reservations by Status", bookingStatusTable)}
+    ${printSection("Reservations by Facility", facilityTable)}
+  `;
+
+  printHTML("Analytics Report", bodyHTML);
 }
