@@ -4,10 +4,15 @@
    across the entire dashboard. Every other module imports the
    `auth` and `db` instances from here instead of re-initializing.
    ============================================================ */
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
+import {
+  initializeApp,
+  getApp,
+  deleteApp,
+} from "https://www.gstatic.com/firebasejs/12.16.0/firebase-app.js";
 import {
   getAuth,
   onAuthStateChanged,
+  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
@@ -47,6 +52,11 @@ export const auth = getAuth(app);
 export const db = getDatabase(app);
 
 export {
+  initializeApp, // NEW
+  getApp, // NEW
+  deleteApp, // NEW
+  getAuth, // NEW
+  createUserWithEmailAndPassword, // NEW
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
