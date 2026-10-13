@@ -27,6 +27,7 @@ import {
   deleteApp,
   getAuth,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   signOut,
 } from "./firebase.js";
 import { DataTable } from "./tables.js";
@@ -1059,17 +1060,31 @@ async function openFormModal(existing) {
         });
       } else {
         saveBtn.textContent = "Creating account…";
-        await createResidentAccount({ email, password, payload, occMap });
-        toast({
-          type: "success",
-          title: "Resident account created",
-          desc: `${v.firstName} ${v.lastName} can now sign in as ${v.role}.`,
+        const { verificationSent } = await createResidentAccount({
+          email,
+          password,
+          payload,
+          occMap,
         });
+        toast(
+          verificationSent
+            ? {
+                type: "success",
+                title: "Resident account created",
+                desc: `A verification email was sent to ${email}.`,
+              }
+            : {
+                type: "warning",
+                title:
+                  "Account created, but the verification email was not sent",
+                desc: `${v.firstName} ${v.lastName} can still sign in. Ask them to use "resend verification" in the app.`,
+              },
+        );
         await logActivity(adminProfile, {
           action: "Created",
           module: "Resident Accounts",
           targetName: `${v.firstName} ${v.lastName}`,
-          details: `Created ${v.role} account (${email})${isOwner && Object.keys(occMap).length ? ` with ${Object.keys(occMap).length} occupant record(s)` : ""}`,
+          details: `Created ${v.role} account (${email}), verification email ${verificationSent ? "sent" : "not sent"}${isOwner && Object.keys(occMap).length ? ` with ${Object.keys(occMap).length} occupant record(s)` : ""}`,
         });
       }
       overlay.close();
@@ -1124,6 +1139,7 @@ async function createResidentAccount({ email, password, payload, occMap }) {
   const secondaryAuth = getAuth(secondaryApp);
   let credential = null;
   let uid = null;
+  let verificationSent = false;
 
   try {
     credential = await createUserWithEmailAndPassword(
@@ -1152,6 +1168,15 @@ async function createResidentAccount({ email, password, payload, occMap }) {
       );
       await set(ref(db, `${DB_PATHS.occupancyInformation}/${uid}`), withUser);
     }
+
+    // Send the verification email only after everything is saved. A failure
+    // here is not fatal: the account exists, the admin is just told to resend.
+    try {
+      await sendEmailVerification(credential.user);
+      verificationSent = true;
+    } catch (verifyErr) {
+      console.error("Failed to send verification email:", verifyErr);
+    }
   } catch (err) {
     // Roll back so nothing is left half-created
     if (uid) {
@@ -1178,6 +1203,8 @@ async function createResidentAccount({ email, password, payload, occMap }) {
     }
     await deleteApp(secondaryApp);
   }
+
+  return { verificationSent };
 }
 
 function friendlyError(err) {

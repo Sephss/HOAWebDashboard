@@ -13,6 +13,7 @@ import {
   getAuth,
   onAuthStateChanged,
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
@@ -57,6 +58,7 @@ export {
   deleteApp, // NEW
   getAuth, // NEW
   createUserWithEmailAndPassword, // NEW
+  sendEmailVerification,
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
