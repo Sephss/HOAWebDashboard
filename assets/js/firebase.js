@@ -95,6 +95,7 @@ export const DB_PATHS = {
   ErrorTicketing: "errorTicketing",
   communitySolicitations: "CommunitySolicitations",
   activityLogs: "ActivityLogs",
+  occupancyInformation: "OccupancyInformation",
 };
 
 /** Roles allowed to sign in to this dashboard. */
