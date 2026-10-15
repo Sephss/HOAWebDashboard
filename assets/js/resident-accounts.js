@@ -38,6 +38,7 @@ import {
   initials,
   getFullName,
   escapeHtml,
+  printHTML,
 } from "./utils.js";
 import { uploadImage } from "./imageUpload.js";
 import { logActivity } from "./activityLogger.js";
@@ -119,28 +120,27 @@ const DATE_KEYS = [
 
 const IMAGE_FIELDS = [
   { key: "imageUrl", label: "Profile Picture", required: true },
-  {
-    key: "proofOfOwnershipUrl",
-    label: "Proof of Ownership",
-    help: "Transfer Certificate of Title, Deed of Sale, Contract to Sell, or other acceptable proof.",
-  },
-  {
-    key: "validIdUrl",
-    label: "Valid Government-Issued ID",
-    help: "One (1) valid government-issued identification card.",
-  },
-  {
-    key: "authorizationLetterUrl",
-    label: "Authorization Letter / Special Power of Attorney (SPA)",
-    help: "Only if the form is submitted by an authorized representative on behalf of the homeowner.",
-  },
-  {
-    key: "leaseContractUrl",
-    label: "Lease Contract / Proof of Tenancy",
-    help: "If the property is occupied by a tenant (if available).",
-  },
+  { key: "supportingDocument1Url", label: "Supporting Document 1" },
+  { key: "supportingDocument2Url", label: "Supporting Document 2" },
 ];
 const IMAGE_KEYS = IMAGE_FIELDS.map((f) => f.key);
+
+/** Documents the admin may submit (information only, there are just two upload slots). */
+const ACCEPTED_DOCUMENTS = [
+  "Proof of Ownership (e.g., Transfer Certificate of Title, Deed of Sale, Contract to Sell, or other acceptable proof)",
+  "One (1) valid government-issued identification card",
+  "Authorization Letter or Special Power of Attorney (SPA), if submitted by an authorized representative on behalf of the homeowner",
+  "Lease Contract or Proof of Tenancy, if the property is occupied by a tenant (if available)",
+];
+/** The two upload slots (everything except the profile picture). */
+const DOC_KEYS = IMAGE_FIELDS.filter((f) => f.key !== "imageUrl").map(
+  (f) => f.key,
+);
+/** At least this many of the supporting documents should be on file. */
+const MIN_DOCUMENTS = 2;
+/** false = show the guidance and a warning, but still allow saving.
+ *  true  = block saving until MIN_DOCUMENTS are uploaded. */
+const ENFORCE_MIN_DOCUMENTS = false;
 const EDITABLE_KEYS = [...TEXT_KEYS, ...DATE_KEYS, ...IMAGE_KEYS];
 
 const LABELS = {
@@ -183,10 +183,8 @@ const LABELS = {
   supportsPetWelfare: "Pet Welfare Participation",
   supportsStrayProgram: "Stray Program Support",
   imageUrl: "Profile Picture",
-  proofOfOwnershipUrl: "Proof of Ownership",
-  validIdUrl: "Valid ID",
-  authorizationLetterUrl: "Authorization Letter",
-  leaseContractUrl: "Lease Contract",
+  supportingDocument1Url: "Supporting Document 1",
+  supportingDocument2Url: "Supporting Document 2",
 };
 
 /* ---------- page shell ---------- */
@@ -331,6 +329,7 @@ const table = new DataTable({
   ],
   defaultSort: "fullName",
   showExportCsv: false,
+  onPrintClick: () => openPrintOptionsModal(),
   columns: [
     {
       key: "fullName",
@@ -387,6 +386,7 @@ const table = new DataTable({
         <div class="row-actions" data-stop-row-click style="display:flex;gap:6px;">
           <button class="btn btn-secondary btn-sm" data-act="open">View</button>
           <button class="btn btn-secondary btn-sm" data-act="edit">Edit</button>
+          <button class="btn btn-secondary btn-sm" data-act="print">Print</button>
         </div>`,
     },
   ],
@@ -412,12 +412,14 @@ onValue(ref(db, DB_PATHS.users), (snap) => {
 });
 
 table.cfg.afterRender = (rows) => {
+  const root = document.getElementById("residentTableRoot");
   const wire = (act, fn) =>
-    document
+    root
       .querySelectorAll(`[data-act="${act}"]`)
       .forEach((btn, i) => btn.addEventListener("click", () => fn(rows[i])));
   wire("open", openViewModal);
   wire("edit", (r) => openFormModal(r));
+  wire("print", (r) => printResident(r));
 };
 
 function renderStats() {
@@ -549,7 +551,7 @@ async function openViewModal(r) {
     (f) => f.key !== "imageUrl" && hasImage(r[f.key]),
   );
   const docsHTML = docs.length
-    ? `<div class="section-title" style="font-size:14px;margin-top:20px;">Supporting Documents</div>
+    ? `<div class="section-title" style="font-size:14px;margin-top:20px;">Supporting Documents (${docs.length} of ${DOC_KEYS.length})</div>
        <div style="display:flex;gap:12px;flex-wrap:wrap;">${docs
          .map(
            (f) =>
@@ -587,12 +589,16 @@ async function openViewModal(r) {
     `,
     footerHTML: `
       <button class="btn btn-secondary" data-act="close">Close</button>
+      <button class="btn btn-secondary" data-act="print">Print Profile</button>
       <button class="btn btn-primary" data-act="edit">Edit</button>
     `,
   });
   overlay
     .querySelector('[data-act="close"]')
     .addEventListener("click", () => overlay.close());
+  overlay
+    .querySelector('[data-act="print"]')
+    .addEventListener("click", () => printResident(r, occupants));
   overlay.querySelector('[data-act="edit"]').addEventListener("click", () => {
     overlay.close();
     openFormModal(r);
@@ -718,6 +724,14 @@ async function openFormModal(existing) {
     `,
     documents: `
       <div class="section-title" style="font-size:14px;">Supporting Documents</div>
+      <div style="background:var(--color-surface-alt,#f6f7f6);border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;line-height:1.6;">
+        <strong>At least ${MIN_DOCUMENTS} out of the ${ACCEPTED_DOCUMENTS.length} documents below can be submitted.</strong>
+        Choose any ${MIN_DOCUMENTS} and upload them in the two slots.
+        <ul style="margin:8px 0 0 18px;padding:0;">
+          ${ACCEPTED_DOCUMENTS.map((d) => `<li>${esc(d)}</li>`).join("")}
+        </ul>
+        <div id="docCounter" style="font-weight:700;margin-top:8px;"></div>
+      </div>
       ${IMAGE_FIELDS.slice(1)
         .map((f) => imageFieldHTML(f, existing?.[f.key]))
         .join("")}
@@ -808,6 +822,21 @@ async function openFormModal(existing) {
     q(s).addEventListener("change", syncConditional),
   );
 
+  /* ----- supporting documents counter ----- */
+  const countDocs = () =>
+    DOC_KEYS.filter((k) => files[k] || (hasImage(existing?.[k]) && !removed[k]))
+      .length;
+  function updateDocCounter() {
+    const n = countDocs();
+    const ok = n >= MIN_DOCUMENTS;
+    const el = q("#docCounter");
+    el.textContent = `${n} of ${DOC_KEYS.length} uploaded · ${ok ? "minimum met" : `${MIN_DOCUMENTS - n} more needed`}`;
+    el.style.color = ok
+      ? "var(--color-success,#1E7E34)"
+      : "var(--color-warning,#B45309)";
+  }
+  updateDocCounter();
+
   /* ----- image fields ----- */
   overlay.querySelectorAll("[data-file-key]").forEach((input) => {
     const key = input.dataset.fileKey;
@@ -816,6 +845,7 @@ async function openFormModal(existing) {
       if (!file) return;
       files[key] = file;
       removed[key] = false;
+      updateDocCounter();
       const reader = new FileReader();
       reader.onload = () => {
         q(`[data-preview="${key}"]`).src = reader.result;
@@ -829,6 +859,7 @@ async function openFormModal(existing) {
     btn.addEventListener("click", () => {
       files[key] = null;
       removed[key] = true;
+      updateDocCounter();
       overlay.querySelector(`[data-file-key="${key}"]`).value = "";
       q(`[data-preview="${key}"]`).src = "";
       q(`[data-preview-wrap="${key}"]`).style.display = "none";
@@ -933,6 +964,17 @@ async function openFormModal(existing) {
     if (hasError) {
       showTab("account");
       toast({ type: "warning", title: "Please complete the required fields" });
+      return;
+    }
+
+    const docCount = countDocs();
+    if (ENFORCE_MIN_DOCUMENTS && docCount < MIN_DOCUMENTS) {
+      showTab("documents");
+      toast({
+        type: "warning",
+        title: `Upload at least ${MIN_DOCUMENTS} supporting documents`,
+        desc: `${docCount} of ${DOC_KEYS.length} uploaded so far.`,
+      });
       return;
     }
 
@@ -1087,6 +1129,13 @@ async function openFormModal(existing) {
           details: `Created ${v.role} account (${email}), verification email ${verificationSent ? "sent" : "not sent"}${isOwner && Object.keys(occMap).length ? ` with ${Object.keys(occMap).length} occupant record(s)` : ""}`,
         });
       }
+      if (docCount < MIN_DOCUMENTS) {
+        toast({
+          type: "warning",
+          title: "Supporting documents incomplete",
+          desc: `Only ${docCount} supporting document${docCount === 1 ? "" : "s"} on file (at least ${MIN_DOCUMENTS} needed). You can add more later through Edit.`,
+        });
+      }
       overlay.close();
     } catch (err) {
       saveBtn.disabled = false;
@@ -1220,4 +1269,377 @@ function friendlyError(err) {
     default:
       return err?.message || "Something went wrong.";
   }
+}
+
+/* ============================================================
+   PRINTING
+   1) Resident list — pick type / phase / status / sort, with a summary.
+   2) Individual — full profile sheet for one Home Owner or Renter.
+   ============================================================ */
+const collator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
+const PRINT_SORTS = {
+  lastName: [
+    "Last Name (A–Z)",
+    (a, b) =>
+      collator.compare(a.lastName || "", b.lastName || "") ||
+      collator.compare(a.firstName || "", b.firstName || ""),
+  ],
+  firstName: [
+    "First Name (A–Z)",
+    (a, b) =>
+      collator.compare(a.firstName || "", b.firstName || "") ||
+      collator.compare(a.lastName || "", b.lastName || ""),
+  ],
+  block: [
+    "Block, then Lot",
+    (a, b) =>
+      collator.compare(a.block || "", b.block || "") ||
+      collator.compare(a.lot || "", b.lot || ""),
+  ],
+  phase: [
+    "Lavanya Phase",
+    (a, b) =>
+      collator.compare(a.lavanyaPhaseType || "", b.lavanyaPhaseType || "") ||
+      collator.compare(a.lastName || "", b.lastName || ""),
+  ],
+};
+
+function statusText(r) {
+  if (isYes(r.isArchived)) return "Archived";
+  if (isYes(r.isAccountBanned)) return "Banned";
+  if (isYes(r.isAccountDisabled)) return "Disabled";
+  if (!isYes(r.isAccountApprovedByAdmin)) return "Pending";
+  return "Active";
+}
+
+function printedOn() {
+  return new Date().toLocaleString("en-US", {
+    timeZone: "Asia/Manila",
+    dateStyle: "long",
+    timeStyle: "short",
+  });
+}
+function preparedBy() {
+  const name =
+    [adminProfile.firstName, adminProfile.lastName].filter(Boolean).join(" ") ||
+    "Admin";
+  return `${name}${adminProfile.role ? ` (${adminProfile.role})` : ""}`;
+}
+
+function filterForPrint({ role, phase, status }) {
+  return allResidents.filter(
+    (r) =>
+      (!role || r.role === role) &&
+      (!phase || r.lavanyaPhaseType === phase) &&
+      (!status || (status === "inactive") === isInactive(r)),
+  );
+}
+
+/* ---------- 1) resident list ---------- */
+function openPrintOptionsModal() {
+  const overlay = openModal({
+    title: "Print Resident List",
+    subtitle: "Choose which residents to include and how to sort them.",
+    bodyHTML: `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="field"><label>Resident Type</label>
+          <select class="select" id="printRole"><option value="">All</option>${ROLES.map((r) => `<option value="${r}">${r}</option>`).join("")}</select></div>
+        <div class="field"><label>Lavanya Phase</label>
+          <select class="select" id="printPhase"><option value="">All</option>${PHASES.map((p) => `<option value="${p}">${p}</option>`).join("")}</select></div>
+        <div class="field"><label>Account Status</label>
+          <select class="select" id="printStatus"><option value="">All</option><option value="active">Active only</option><option value="inactive">Inactive only (banned, disabled, archived)</option></select></div>
+        <div class="field"><label>Sort by</label>
+          <select class="select" id="printSort">${Object.entries(PRINT_SORTS)
+            .map(([k, [label]]) => `<option value="${k}">${label}</option>`)
+            .join("")}</select></div>
+      </div>
+      <div id="printMatchCount" style="font-size:13px;font-weight:600;margin-top:4px;"></div>
+    `,
+    footerHTML: `
+      <button class="btn btn-secondary" data-act="cancel">Cancel</button>
+      <button class="btn btn-primary" data-act="print">Print</button>
+    `,
+  });
+
+  const read = () => ({
+    role: overlay.querySelector("#printRole").value,
+    phase: overlay.querySelector("#printPhase").value,
+    status: overlay.querySelector("#printStatus").value,
+    sort: overlay.querySelector("#printSort").value,
+  });
+  const updateCount = () => {
+    const n = filterForPrint(read()).length;
+    overlay.querySelector("#printMatchCount").textContent =
+      `${n} resident${n === 1 ? "" : "s"} will be printed.`;
+  };
+  overlay
+    .querySelectorAll("select")
+    .forEach((el) => el.addEventListener("change", updateCount));
+  updateCount();
+
+  overlay
+    .querySelector('[data-act="cancel"]')
+    .addEventListener("click", () => overlay.close());
+  overlay.querySelector('[data-act="print"]').addEventListener("click", () => {
+    const opts = read();
+    if (!filterForPrint(opts).length) {
+      toast({
+        type: "warning",
+        title: "Nothing to print",
+        desc: "No residents match those options.",
+      });
+      return;
+    }
+    overlay.close();
+    printResidentList(opts);
+  });
+}
+
+function printResidentList(opts) {
+  const rows = filterForPrint(opts).sort(PRINT_SORTS[opts.sort][1]);
+
+  const countRow = (label, list) =>
+    `<tr><td>${label}</td>${PHASES.map((p) => `<td>${list.filter((r) => r.lavanyaPhaseType === p).length}</td>`).join("")}<td><strong>${list.length}</strong></td></tr>`;
+  const summary = `
+    <table style="width:auto;min-width:360px;">
+      <thead><tr><th>Type</th>${PHASES.map((p) => `<th>${p}</th>`).join("")}<th>Total</th></tr></thead>
+      <tbody>
+        ${countRow(
+          "Home Owners",
+          rows.filter((r) => r.role === "Home Owners"),
+        )}
+        ${countRow(
+          "Renters",
+          rows.filter((r) => r.role === "Renters"),
+        )}
+        ${countRow("<strong>All</strong>", rows)}
+      </tbody>
+    </table>`;
+
+  const body = rows
+    .map(
+      (r, i) => `<tr style="page-break-inside:avoid;">
+        <td>${i + 1}</td>
+        <td><strong>${esc(getFullName(r) || "Unnamed")}</strong></td>
+        <td>${esc(r.role || "—")}</td>
+        <td>${esc(r.block || "—")} / ${esc(r.lot || "—")} / ${esc(r.street || "—")}</td>
+        <td>${esc(r.lavanyaPhaseType || "—")}</td>
+        <td>${esc(r.phoneNumber || "—")}</td>
+        <td>${esc(r.email || "—")}</td>
+        <td>${esc(statusText(r))}</td>
+      </tr>`,
+    )
+    .join("");
+
+  const filters = [
+    `Type: ${opts.role || "All"}`,
+    `Phase: ${opts.phase || "All"}`,
+    `Status: ${opts.status === "active" ? "Active only" : opts.status === "inactive" ? "Inactive only" : "All"}`,
+    `Sorted by: ${PRINT_SORTS[opts.sort][0]}`,
+  ].join(" · ");
+
+  printHTML(
+    "Resident Accounts",
+    `<div style="font-size:12px;color:#5C5F61;margin-bottom:4px;">Printed ${esc(printedOn())} · Prepared by ${esc(preparedBy())}</div>
+     <div style="font-size:12px;color:#5C5F61;margin-bottom:14px;">${esc(filters)}</div>
+     <h2 style="font-size:13px;color:#013717;margin:0 0 6px;">Summary</h2>
+     ${summary}
+     <h2 style="font-size:13px;color:#013717;margin:20px 0 6px;">Residents (${rows.length})</h2>
+     <table>
+       <thead><tr><th>#</th><th>Resident</th><th>Type</th><th>Block / Lot / Street</th><th>Phase</th><th>Phone</th><th>Email</th><th>Status</th></tr></thead>
+       <tbody>${body}</tbody>
+     </table>`,
+  );
+  toast({
+    type: "success",
+    title: "Print ready",
+    desc: `${rows.length} resident${rows.length === 1 ? "" : "s"} included.`,
+  });
+}
+
+/* ---------- 2) individual profile sheet ---------- */
+async function printResident(r, preloadedOccupants) {
+  let occupants = preloadedOccupants || [];
+  if (!preloadedOccupants && r.role === "Home Owners") {
+    try {
+      occupants = await fetchOccupants(uidOf(r));
+    } catch (e) {
+      console.error("Failed to load occupancy for print:", e);
+      toast({
+        type: "warning",
+        title: "Occupancy records could not be loaded",
+        desc: "The sheet will print without them.",
+      });
+    }
+  }
+
+  const show = (v) => esc(displayValue(v));
+  const kv = (label, value) =>
+    `<tr><th style="text-align:left;width:34%;vertical-align:top;">${label}</th><td style="white-space:pre-wrap;">${value}</td></tr>`;
+  const section = (title, inner) =>
+    `<div style="page-break-inside:avoid;">
+       <h2 style="font-size:13px;color:#013717;margin:20px 0 6px;border-bottom:1px solid #d9d9d9;padding-bottom:4px;">${title}</h2>
+       ${inner}
+     </div>`;
+  const kvTable = (rows) => `<table><tbody>${rows.join("")}</tbody></table>`;
+
+  // Emergency contacts: line N of each box is the same person
+  const lines = (s) =>
+    String(s || "")
+      .split("\n")
+      .map((x) => x.trim());
+  const names = lines(r.emergencyContactName);
+  const rels = lines(r.emergencyContactRelationship);
+  const nums = lines(r.emergencyContactNumber);
+  const contactRows = [];
+  for (let i = 0; i < Math.max(names.length, rels.length, nums.length); i++) {
+    if (names[i] || rels[i] || nums[i]) {
+      contactRows.push(
+        `<tr><td>${contactRows.length + 1}</td><td>${esc(names[i] || "—")}</td><td>${esc(rels[i] || "—")}</td><td>${esc(nums[i] || "—")}</td></tr>`,
+      );
+    }
+  }
+  const emergencyHTML = contactRows.length
+    ? `<table><thead><tr><th>#</th><th>Name</th><th>Relationship</th><th>Contact Number</th></tr></thead><tbody>${contactRows.join("")}</tbody></table>`
+    : `<div style="font-size:12px;color:#5C5F61;">No emergency contacts on file.</div>`;
+
+  const isOwner = r.role === "Home Owners";
+  const occupancyHTML = occupants.length
+    ? `<table><thead><tr><th>#</th><th>Full Name</th><th>Relationship to the Owner</th><th>Age</th><th>Contact Information</th></tr></thead><tbody>
+        ${occupants.map((o, i) => `<tr style="page-break-inside:avoid;"><td>${i + 1}</td><td>${esc(o.fullName || "—")}</td><td>${esc(o.relationshipToOwner || "—")}</td><td>${esc(o.age || "—")}</td><td>${esc(o.contactInformation || "—")}</td></tr>`).join("")}
+       </tbody></table>`
+    : `<div style="font-size:12px;color:#5C5F61;">No occupancy records on file.</div>`;
+
+  const petLabel =
+    r.petType === "Others" && r.petOtherType
+      ? `Others (${r.petOtherType})`
+      : r.petType;
+  const petRows = [
+    kv("Pet", show(petLabel)),
+    kv("Number of Pets", show(r.numberOfPets)),
+  ];
+  if (r.petType === "Dog" || r.petType === "Cat") {
+    petRows.push(
+      kv("Vaccinated (Anti-Rabies)", show(r.petVaccinated)),
+      kv("Neutered / Castrated (Kapon)", show(r.petNeutered)),
+    );
+  }
+  petRows.push(
+    kv(
+      "Supports pet welfare and public health programs (spay/neuter, anti-rabies)",
+      show(r.supportsPetWelfare),
+    ),
+    kv(
+      "In favor of a humane stray animal management program",
+      show(r.supportsStrayProgram),
+    ),
+  );
+
+  const docFields = IMAGE_FIELDS.filter((f) => f.key !== "imageUrl");
+  const docsSubmitted = docFields.filter((f) => hasImage(r[f.key])).length;
+  const docsHTML = `
+    <div style="font-size:12px;margin-bottom:4px;"><strong>${docsSubmitted} of ${docFields.length}</strong> uploaded · at least ${MIN_DOCUMENTS} of the ${ACCEPTED_DOCUMENTS.length} accepted documents are required${docsSubmitted >= MIN_DOCUMENTS ? " (requirement met)" : " (requirement not yet met)"}</div>
+    <div style="font-size:11px;color:#5C5F61;margin-bottom:8px;">Accepted: ${ACCEPTED_DOCUMENTS.map(esc).join("; ")}</div>
+    <table><tbody>${docFields.map((f) => kv(esc(f.label), hasImage(r[f.key]) ? "Submitted" : "Not submitted")).join("")}</tbody></table>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:10px;">
+      ${docFields
+        .filter((f) => hasImage(r[f.key]))
+        .map(
+          (f) =>
+            `<div style="page-break-inside:avoid;width:240px;font-size:11px;"><img src="${esc(r[f.key])}" alt="" style="width:240px;max-height:200px;object-fit:contain;border:1px solid #ccc;"><div style="margin-top:3px;">${esc(f.label)}</div></div>`,
+        )
+        .join("")}
+    </div>`;
+
+  const fullName = getFullName(r) || "Unnamed";
+  const header = `
+    <div style="display:flex;gap:16px;align-items:center;margin-bottom:6px;">
+      ${hasImage(r.imageUrl) ? `<img src="${esc(r.imageUrl)}" alt="" style="width:96px;height:96px;object-fit:cover;border:1px solid #ccc;">` : ""}
+      <div>
+        <div style="font-size:20px;font-weight:700;">${esc(fullName)}</div>
+        <div style="font-size:13px;color:#5C5F61;margin-top:2px;">${esc(r.role || "—")} · ${esc(statusText(r))}</div>
+        <div style="font-size:12px;color:#5C5F61;margin-top:2px;">${esc(r.email || "")}</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:#5C5F61;">Printed ${esc(printedOn())} · Prepared by ${esc(preparedBy())}</div>`;
+
+  const parts = [
+    header,
+    section(
+      "Account Information",
+      kvTable([
+        kv("Full Name", esc(fullName)),
+        kv("Resident Type", show(r.role)),
+        kv("Email Address", show(r.email)),
+        kv("Phone Number", show(r.phoneNumber)),
+        kv(
+          "Block / Lot / Street",
+          `${esc(r.block || "—")} / ${esc(r.lot || "—")} / ${esc(r.street || "—")}`,
+        ),
+        kv("Lavanya Phase", show(r.lavanyaPhaseType)),
+        kv("Account Status", esc(statusText(r))),
+      ]),
+    ),
+    section(
+      "Homeowner Information (Primary Member)",
+      kvTable([
+        kv("Birthday", show(r.birthday)),
+        kv("Gender", show(r.gender)),
+        kv("Civil Status", show(r.civilStatus)),
+        kv(
+          "Preferred Method of Communication",
+          show(
+            r.preferredCommunication === "Messenger" && r.messengerName
+              ? `Messenger (${r.messengerName})`
+              : r.preferredCommunication,
+          ),
+        ),
+      ]),
+    ),
+    section(
+      "Property Information",
+      kvTable([
+        kv("Date Occupied", show(r.dateOccupied)),
+        kv("Date Acquired", show(r.dateAcquired)),
+        kv("Notes", show(r.propertyNotes)),
+      ]),
+    ),
+    section("Emergency Contacts", emergencyHTML),
+    isOwner
+      ? section(`Occupancy Information (${occupants.length})`, occupancyHTML)
+      : "",
+    section(
+      "Tenant Information",
+      kvTable([
+        kv("Name of Tenant", show(r.tenantName)),
+        kv("Contact", show(r.tenantContact)),
+        kv("Start of Lease", show(r.leaseStart)),
+        kv("End of Lease", show(r.leaseEnd)),
+        kv("Number of Occupants", show(r.tenantNumberOfOccupants)),
+      ]),
+    ),
+    section(
+      "Vehicle Information",
+      kvTable([
+        kv("Vehicles Owned", show(r.numberOfVehicles)),
+        kv("Type of Vehicle", show(r.vehicleType)),
+        kv("Plate Number", show(r.plateNumber)),
+        kv("Make", show(r.vehicleMake)),
+        kv("Model", show(r.vehicleModel)),
+        kv("Color", show(r.vehicleColor)),
+      ]),
+    ),
+    section("Pet Information", kvTable(petRows)),
+    section("Supporting Documents", docsHTML),
+  ];
+
+  printHTML(`Resident Profile — ${fullName}`, parts.join(""));
+  toast({
+    type: "success",
+    title: "Print ready",
+    desc: `${fullName}'s profile sheet is ready.`,
+  });
 }
