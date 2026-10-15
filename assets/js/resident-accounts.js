@@ -430,7 +430,7 @@ function renderStats() {
     ["Total Residents", allResidents.length],
     ["Home Owners", owners],
     ["Renters", renters],
-    ["Inactive", inactive],
+    // ["Inactive", inactive],
   ]
     .map(
       ([label, value]) =>
